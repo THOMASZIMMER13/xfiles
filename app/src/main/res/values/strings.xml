@@ -20,9 +20,7 @@
 
     <!-- Racine d'Explorer -->
     <string name="section_on_device">Sur l\'appareil</string>
-    <string name="location_internal">Stockage interne</string>
-    <string name="location_downloads">Téléchargements</string>
-    <string name="location_documents">Documents</string>
+    <string name="location_internal">Mémoire interne</string>
     <!-- %1$s : espace libre, %2$s : capacité totale (abrégés, ex. « 34,2 Go ») -->
     <string name="location_space">%1$s libres sur %2$s</string>
     <!-- Lu par TalkBack. %1$s : nom, %2$s : espace libre, %3$s : capacité (en toutes lettres) -->
@@ -44,4 +42,37 @@
     <string name="breadcrumb_spoken">Emplacement : %1$s</string>
     <string name="breadcrumb_go_to">Aller à %1$s</string>
     <string name="breadcrumb_go_root">Aller aux emplacements</string>
+
+    <!-- Favoris -->
+    <string name="section_favorites">Favoris</string>
+    <!-- %1$s : dossiers parents, ex. « Mémoire interne, Documents » -->
+    <string name="favorite_in">dans %1$s</string>
+    <string name="favorite_missing">introuvable</string>
+    <string name="action_add_favorite">Ajouter aux favoris</string>
+    <string name="action_remove_favorite">Retirer des favoris</string>
+    <!-- %1$s : nom du dossier -->
+    <string name="favorite_added">%1$s ajouté aux favoris.</string>
+    <string name="favorite_removed">%1$s retiré des favoris.</string>
+
+    <!-- Tri et affichage -->
+    <string name="sort_title">Trier et afficher</string>
+    <string name="sort_by">Trier par</string>
+    <string name="sort_name">Nom</string>
+    <string name="sort_date">Date de modification</string>
+    <string name="sort_size">Taille</string>
+    <string name="sort_type">Type</string>
+    <string name="sort_order">Ordre</string>
+    <string name="order_az">De A à Z</string>
+    <string name="order_za">De Z à A</string>
+    <string name="order_recent_first">Plus récents d\'abord</string>
+    <string name="order_oldest_first">Plus anciens d\'abord</string>
+    <string name="order_largest_first">Plus grands d\'abord</string>
+    <string name="order_smallest_first">Plus petits d\'abord</string>
+    <string name="show_hidden">Afficher les fichiers cachés</string>
+    <string name="action_apply">Appliquer</string>
+    <string name="action_cancel">Annuler</string>
+    <!-- %1$s : critère (« date de modification »), %2$s : ordre (« Plus récents d'abord ») -->
+    <string name="sort_applied">Tri : %1$s, %2$s.</string>
+    <string name="hidden_shown">Fichiers cachés affichés.</string>
+    <string name="hidden_hidden">Fichiers cachés masqués.</string>
 </resources>

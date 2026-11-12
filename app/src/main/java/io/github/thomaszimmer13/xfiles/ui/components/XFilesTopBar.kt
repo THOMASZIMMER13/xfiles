@@ -1,6 +1,7 @@
 package io.github.thomaszimmer13.xfiles.ui.components
 
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -31,6 +32,7 @@ import io.github.thomaszimmer13.xfiles.R
  * @param spokenTitle texte lu par TalkBack, plus riche que le titre affiché (« Factures, 12 éléments »).
  * @param onBack si non nul, affiche un bouton « Retour » avant le titre.
  * @param titleFocus permet de placer le focus TalkBack sur le titre à l'ouverture d'un dossier.
+ * @param actions boutons à droite du titre (lus après lui par TalkBack).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,8 +41,10 @@ fun XFilesTopBar(
     spokenTitle: String = title,
     onBack: (() -> Unit)? = null,
     titleFocus: FocusRequester? = null,
+    actions: @Composable RowScope.() -> Unit = {},
 ) {
     TopAppBar(
+        actions = actions,
         // Les marges de la barre d'état sont déjà gérées par l'écran parent.
         windowInsets = WindowInsets(0),
         navigationIcon = {

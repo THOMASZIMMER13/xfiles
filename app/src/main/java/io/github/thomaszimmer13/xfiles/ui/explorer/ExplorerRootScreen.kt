@@ -27,9 +27,13 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -45,9 +49,10 @@ import io.github.thomaszimmer13.xfiles.ui.components.StatusMessage
 import io.github.thomaszimmer13.xfiles.ui.components.XFilesTopBar
 
 /**
- * Racine de l'onglet Explorer : la liste des emplacements, façon « Parcourir » d'iOS.
+ * Racine de l'onglet Explorer, façon « Parcourir » d'iOS :
+ * « Sur l'appareil » (mémoire interne, carte SD, clé USB) puis « Favoris » (dossiers épinglés).
  *
- * @param focusPath chemin d'où l'on revient : le focus est replacé sur l'emplacement correspondant.
+ * @param focusPath chemin d'où l'on revient : le focus est replacé sur la ligne correspondante.
  */
 @Composable
 fun ExplorerRootScreen(
@@ -56,25 +61,31 @@ fun ExplorerRootScreen(
     viewModel: ExplorerRootViewModel = viewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val announcement by viewModel.announcer.message.collectAsStateWithLifecycle()
 
-    // L'espace libre a pu changer pendant que l'app était en arrière-plan.
+    // L'espace libre et l'existence des favoris ont pu changer pendant que l'app était en arrière-plan.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
 
+    // Indices dans la liste : 0 = titre « Sur l'appareil », puis les volumes,
+    // puis le titre « Favoris » et les favoris.
+    val favoritesStart = 1 + state.locations.size + 1
     val listState = rememberLazyListState()
-    val itemFocus = remember { FocusRequester() }
-    // L'emplacement exact (ex. Téléchargements) a priorité sur le volume qui le contient.
-    val focusTarget = focusPath?.let { target ->
-        state.locations.firstOrNull { it.path == target }
-            ?: state.locations.filter { target.startsWith("${it.path}/") }.maxByOrNull { it.path.length }
+    val rowFocus = remember { FocusRequester() }
+
+    // Un favori exact (ex. Documents) a priorité sur le volume qui le contient.
+    val focusIndex: Int? = focusPath?.let { target ->
+        state.favorites.indexOfFirst { it.path == target }.takeIf { it >= 0 }?.let { favoritesStart + it }
+            ?: state.locations.indexOfFirst { it.path == target }.takeIf { it >= 0 }?.let { 1 + it }
+            ?: state.locations.withIndex()
+                .filter { target.startsWith("${it.value.path}/") }
+                .maxByOrNull { it.value.path.length }?.let { 1 + it.index }
     }
 
     FocusOnceEffect(ready = focusPath != null && state.locations.isNotEmpty()) {
-        val index = state.locations.indexOf(focusTarget)
-        if (index >= 0) {
-            listState.scrollToItem(index + 1) // +1 : le titre de section est le premier élément
-            withFrameNanos { }
-            itemFocus.requestFocus()
-        }
+        val index = focusIndex ?: return@FocusOnceEffect
+        listState.scrollToItem(index)
+        withFrameNanos { }
+        rowFocus.requestFocus()
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -88,17 +99,29 @@ fun ExplorerRootScreen(
             item(key = "header-device") {
                 SectionHeader(stringResource(R.string.section_on_device))
             }
-            items(state.locations, key = { it.path }) { location ->
+            items(state.locations, key = { "loc:" + it.path }) { location ->
                 LocationRow(
                     location = location,
-                    focusRequester = if (location == focusTarget) itemFocus else null,
+                    focusRequester = if (focusIndex == 1 + state.locations.indexOf(location)) rowFocus else null,
                     onOpen = onOpen,
                 )
-                HorizontalDivider(Modifier.padding(start = 56.dp))
+            }
+            if (state.favorites.isNotEmpty()) {
+                item(key = "header-favorites") {
+                    SectionHeader(stringResource(R.string.section_favorites))
+                }
+                items(state.favorites, key = { "fav:" + it.path }) { favorite ->
+                    FavoriteRow(
+                        favorite = favorite,
+                        focusRequester = if (focusIndex == favoritesStart + state.favorites.indexOf(favorite)) rowFocus else null,
+                        onOpen = onOpen,
+                        onRemove = viewModel::removeFavorite,
+                    )
+                }
             }
         }
         // Hors de la liste pour être toujours présent, même si la liste défile.
-        StatusMessage(state.announcement)
+        StatusMessage(announcement)
     }
 }
 
@@ -106,59 +129,99 @@ fun ExplorerRootScreen(
 private fun LocationRow(location: StorageLocation, focusRequester: FocusRequester?, onOpen: (String) -> Unit) {
     val free = location.freeBytes
     val total = location.totalBytes
-    val visibleDetail = if (free != null && total != null) {
-        stringResource(R.string.location_space, SizeFormatter.short(free), SizeFormatter.short(total))
+    val hasSpace = free != null && total != null
+    val visibleDetail = if (hasSpace) {
+        stringResource(R.string.location_space, SizeFormatter.short(free!!), SizeFormatter.short(total!!))
     } else {
         null
     }
-    val spoken = if (free != null && total != null) {
-        stringResource(
-            R.string.location_spoken_with_space,
-            location.name,
-            SizeFormatter.spoken(free),
-            SizeFormatter.spoken(total),
-        )
+    val spoken = if (hasSpace) {
+        stringResource(R.string.location_spoken_with_space, location.name, SizeFormatter.spoken(free!!), SizeFormatter.spoken(total!!))
     } else {
         location.name
     }
     val openLabel = stringResource(R.string.action_open)
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 56.dp)
-            .then(if (focusRequester != null) Modifier.focusRequester(focusRequester).focusable() else Modifier)
-            // Un seul élément TalkBack par emplacement, avec un texte entièrement maîtrisé.
-            .clearAndSetSemantics {
-                contentDescription = spoken
-                onClick(label = openLabel) { onOpen(location.path); true }
-            }
-            .clickable { onOpen(location.path) }
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-    ) {
-        Icon(
-            painter = painterResource(location.kind.icon()),
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-        )
-        Spacer(Modifier.width(16.dp))
-        Column {
-            Text(location.name, style = MaterialTheme.typography.bodyLarge)
-            if (visibleDetail != null) {
-                Text(
-                    visibleDetail,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
+    RootRow(
+        icon = if (location.kind == LocationKind.INTERNAL) R.drawable.ic_location_internal else R.drawable.ic_location_removable,
+        title = location.name,
+        detail = visibleDetail,
+        focusRequester = focusRequester,
+        onClick = { onOpen(location.path) },
+        semantics = {
+            contentDescription = spoken
+            onClick(label = openLabel) { onOpen(location.path); true }
+        },
+    )
 }
 
-private fun LocationKind.icon(): Int = when (this) {
-    LocationKind.INTERNAL -> R.drawable.ic_location_internal
-    LocationKind.DOWNLOADS -> R.drawable.ic_location_downloads
-    LocationKind.DOCUMENTS -> R.drawable.ic_location_documents
-    LocationKind.REMOVABLE -> R.drawable.ic_location_removable
+@Composable
+private fun FavoriteRow(
+    favorite: FavoriteFolder,
+    focusRequester: FocusRequester?,
+    onOpen: (String) -> Unit,
+    onRemove: (FavoriteFolder) -> Unit,
+) {
+    val where = favorite.parents.joinToString(", ")
+    val missing = stringResource(R.string.favorite_missing)
+    val spoken = buildString {
+        append(favorite.name)
+        if (where.isNotEmpty()) append(", ").append(stringResource(R.string.favorite_in, where))
+        if (!favorite.exists) append(", ").append(missing)
+    }
+    val openLabel = stringResource(R.string.action_open)
+    val removeLabel = stringResource(R.string.action_remove_favorite)
+
+    RootRow(
+        icon = R.drawable.ic_favorite,
+        title = favorite.name,
+        detail = if (favorite.exists) favorite.parents.joinToString(" › ") else missing,
+        focusRequester = focusRequester,
+        onClick = { if (favorite.exists) onOpen(favorite.path) },
+        semantics = {
+            contentDescription = spoken
+            if (favorite.exists) onClick(label = openLabel) { onOpen(favorite.path); true }
+            customActions = listOf(CustomAccessibilityAction(removeLabel) { onRemove(favorite); true })
+        },
+    )
+}
+
+/** Ligne de la racine : un seul élément TalkBack, dont le texte et les actions sont fournis par [semantics]. */
+@Composable
+private fun RootRow(
+    icon: Int,
+    title: String,
+    detail: String?,
+    focusRequester: FocusRequester?,
+    onClick: () -> Unit,
+    semantics: SemanticsPropertyReceiver.() -> Unit,
+) {
+    Column {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 56.dp)
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester).focusable() else Modifier)
+                .clearAndSetSemantics(semantics)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            Icon(painterResource(icon), contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(16.dp))
+            Column {
+                Text(title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (!detail.isNullOrEmpty()) {
+                    Text(
+                        detail,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+        HorizontalDivider(Modifier.padding(start = 56.dp))
+    }
 }

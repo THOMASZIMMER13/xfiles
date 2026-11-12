@@ -14,14 +14,14 @@ import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.flowOn
 import java.io.File
 
-enum class LocationKind { INTERNAL, DOWNLOADS, DOCUMENTS, REMOVABLE }
+enum class LocationKind { INTERNAL, REMOVABLE }
 
 /** Un emplacement affiché à la racine d'Explorer. */
 data class StorageLocation(
     val kind: LocationKind,
     val name: String,
     val path: String,
-    /** Espace libre et total, uniquement pour les volumes (pas pour les raccourcis de dossier). */
+    /** Espace libre et total ; null si le volume ne peut pas être interrogé. */
     val freeBytes: Long? = null,
     val totalBytes: Long? = null,
 )
@@ -38,10 +38,6 @@ class VolumeRepository(private val context: Context) {
 
         mounted.firstOrNull { it.isPrimary }?.directory?.let { root ->
             result += volumeLocation(LocationKind.INTERNAL, context.getString(R.string.location_internal), root)
-            folderShortcut(root, Environment.DIRECTORY_DOWNLOADS, LocationKind.DOWNLOADS, R.string.location_downloads)
-                ?.let { result += it }
-            folderShortcut(root, Environment.DIRECTORY_DOCUMENTS, LocationKind.DOCUMENTS, R.string.location_documents)
-                ?.let { result += it }
         }
 
         mounted.filter { !it.isPrimary }.forEach { volume ->
@@ -54,7 +50,7 @@ class VolumeRepository(private val context: Context) {
 
     /**
      * Racines des volumes montés (nom, chemin), sans calcul d'espace libre.
-     * Sert au fil d'Ariane : « Stockage interne » plutôt que « /storage/emulated/0 ».
+     * Sert au fil d'Ariane : « Mémoire interne » plutôt que « /storage/emulated/0 ».
      */
     fun volumeRoots(): List<Pair<String, String>> =
         storageManager.storageVolumes.filter { it.isMounted() }.mapNotNull { volume ->
@@ -86,10 +82,5 @@ class VolumeRepository(private val context: Context) {
             null to null
         }
         return StorageLocation(kind, name, dir.path, free, total)
-    }
-
-    private fun folderShortcut(root: File, dirName: String, kind: LocationKind, label: Int): StorageLocation? {
-        val dir = File(root, dirName)
-        return if (dir.isDirectory) StorageLocation(kind, context.getString(label), dir.path) else null
     }
 }
