@@ -104,4 +104,29 @@
     <string name="action_copy_path">Copier le chemin</string>
     <string name="action_close">Fermer</string>
     <string name="path_copied">Chemin copié dans le presse-papiers.</string>
+
+    <!-- Nouveau dossier, renommer -->
+    <string name="new_folder_title">Nouveau dossier</string>
+    <string name="new_folder_default">Nouveau dossier</string>
+    <string name="action_create">Créer</string>
+    <string name="action_rename">Renommer</string>
+    <!-- %1$s : nom actuel -->
+    <string name="rename_title">Renommer %1$s</string>
+    <string name="name_label">Nom</string>
+    <string name="name_error_empty">Le nom ne peut pas être vide.</string>
+    <string name="name_error_reserved">Ce nom est réservé par le système.</string>
+    <string name="name_error_too_long">Le nom est trop long.</string>
+    <!-- %1$s : nom saisi -->
+    <string name="name_error_exists">Un élément nommé %1$s existe déjà ici.</string>
+    <!-- %1$s : liste des caractères interdits -->
+    <string name="name_error_characters">Caractères interdits : %1$s</string>
+    <string name="name_error_characters_spoken">Le nom contient un caractère interdit. Sont interdits : barre oblique, barre oblique inversée, deux-points, astérisque, point d\'interrogation, guillemet, chevron ouvrant, chevron fermant et barre verticale.</string>
+    <!-- %1$s : nom du dossier créé ou nouveau nom -->
+    <string name="folder_created">Dossier %1$s créé.</string>
+    <string name="renamed">Renommé en %1$s.</string>
+    <!-- Échecs d'opération. %1$s : nom concerné -->
+    <string name="op_already_exists">%1$s existe déjà.</string>
+    <string name="op_not_found">%1$s n\'existe plus.</string>
+    <string name="op_denied">Action refusée : cet emplacement est en lecture seule.</string>
+    <string name="op_failed">L\'opération sur %1$s a échoué.</string>
 </resources>

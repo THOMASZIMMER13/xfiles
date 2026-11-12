@@ -16,14 +16,25 @@ data class FileItem(
 )
 
 /**
- * Une source de fichiers. L'interface ne contient que la lecture pour l'instant ;
- * les opérations (créer, renommer, copier…) viendront s'y ajouter aux étapes suivantes.
+ * Une source de fichiers : stockage local aujourd'hui ;
+ * plus tard ShizukuFileSource (Android/data), ZipFileSource, WebDavFileSource…
  *
- * Plus tard : ShizukuFileSource (Android/data), ZipFileSource, WebDavFileSource…
+ * Les opérations lancent [FolderNotReadableException] ou [FileOperationException] en cas d'échec.
  */
 interface FileSource {
-    /** Liste le contenu d'un dossier. Lance [FolderNotReadableException] si c'est impossible. */
+    /** Liste le contenu d'un dossier. */
     suspend fun list(path: String, includeHidden: Boolean = false): List<FileItem>
+
+    /** Crée un dossier [name] dans [parent] ; renvoie son chemin. */
+    suspend fun createDirectory(parent: String, name: String): String
+
+    /** Renomme un fichier ou un dossier ; renvoie le nouveau chemin. */
+    suspend fun rename(path: String, newName: String): String
 }
 
 class FolderNotReadableException(path: String) : IOException("Dossier illisible : $path")
+
+/** Échec d'une opération, avec une raison que l'interface sait annoncer. */
+class FileOperationException(val reason: Reason, message: String) : IOException(message) {
+    enum class Reason { ALREADY_EXISTS, NOT_FOUND, DENIED, FAILED }
+}

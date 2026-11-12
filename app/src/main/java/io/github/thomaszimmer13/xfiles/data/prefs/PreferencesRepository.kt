@@ -59,4 +59,18 @@ class PreferencesRepository(private val context: Context) {
         }
         return nowFavorite
     }
+
+    /** Après un renommage : les favoris situés à [oldPath] ou en dessous suivent le nouveau chemin. */
+    suspend fun onPathRenamed(oldPath: String, newPath: String) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[Keys.FAVORITE_FOLDERS].orEmpty().split('\n').filter { it.isNotEmpty() }
+            prefs[Keys.FAVORITE_FOLDERS] = current.joinToString("\n") { path ->
+                when {
+                    path == oldPath -> newPath
+                    path.startsWith("$oldPath/") -> newPath + path.removePrefix(oldPath)
+                    else -> path
+                }
+            }
+        }
+    }
 }

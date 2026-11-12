@@ -76,6 +76,9 @@ fun FolderScreen(
     var showSortDialog by rememberSaveable { mutableStateOf(false) }
     // Chemin de l'élément dont les détails sont affichés (null = dialogue fermé).
     var detailsPath by rememberSaveable { mutableStateOf<String?>(null) }
+    var showNewFolderDialog by rememberSaveable { mutableStateOf(false) }
+    // Chemin de l'élément en cours de renommage (null = dialogue fermé).
+    var renamePath by rememberSaveable { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
     val openWithTitle = stringResource(R.string.chooser_open_with)
@@ -100,6 +103,7 @@ fun FolderScreen(
         },
         openWith = { item -> report(FileOpener.open(context, item.path, item.name, chooserTitle = openWithTitle)) },
         share = { item -> report(FileOpener.share(context, item.path, item.name, shareTitle)) },
+        rename = { item -> renamePath = item.path },
         toggleFavorite = viewModel::toggleFavorite,
         details = { item -> detailsPath = item.path },
     )
@@ -127,6 +131,18 @@ fun FolderScreen(
         }
     }
 
+    // Après une création ou un renommage : focus sur l'élément concerné.
+    val focusRequest = state.focusRequest
+    LaunchedEffect(focusRequest, state.items) {
+        val target = focusRequest ?: return@LaunchedEffect
+        val index = state.items.indexOfFirst { it.path == target }
+        if (index < 0) return@LaunchedEffect
+        listState.scrollToItem(index)
+        withFrameNanos { }
+        runCatching { itemFocus.requestFocus() }
+        viewModel.consumeFocusRequest()
+    }
+
     Column(Modifier.fillMaxSize()) {
         XFilesTopBar(
             title = title,
@@ -134,6 +150,9 @@ fun FolderScreen(
             onBack = onBack,
             titleFocus = titleFocus,
             actions = {
+                IconButton(onClick = { showNewFolderDialog = true }) {
+                    Icon(painterResource(R.drawable.ic_new_folder), contentDescription = stringResource(R.string.new_folder_title))
+                }
                 IconButton(onClick = { showSortDialog = true }) {
                     Icon(painterResource(R.drawable.ic_sort), contentDescription = stringResource(R.string.sort_title))
                 }
@@ -151,7 +170,7 @@ fun FolderScreen(
                         FileRow(
                             item = item,
                             isFavorite = item.path in state.favorites,
-                            focusRequester = if (item.path == focusTarget) itemFocus else null,
+                            focusRequester = if (item.path == (focusRequest ?: focusTarget)) itemFocus else null,
                             actions = actions,
                         )
                     }
@@ -169,6 +188,38 @@ fun FolderScreen(
                 viewModel.applySort(it)
             },
             onDismiss = { showSortDialog = false },
+        )
+    }
+
+    if (showNewFolderDialog) {
+        val defaultName = stringResource(R.string.new_folder_default)
+        NameDialog(
+            title = stringResource(R.string.new_folder_title),
+            confirmLabel = stringResource(R.string.action_create),
+            initialName = remember(defaultName) { viewModel.suggestedFolderName(defaultName) },
+            keepExtension = false,
+            check = { viewModel.checkName(it) },
+            onConfirm = {
+                showNewFolderDialog = false
+                viewModel.createFolder(it)
+            },
+            onDismiss = { showNewFolderDialog = false },
+        )
+    }
+
+    val renameItem = renamePath?.let { p -> state.items.firstOrNull { it.path == p } }
+    if (renameItem != null) {
+        NameDialog(
+            title = stringResource(R.string.rename_title, renameItem.name),
+            confirmLabel = stringResource(R.string.action_rename),
+            initialName = renameItem.name,
+            keepExtension = !renameItem.isDirectory,
+            check = { viewModel.checkName(it, current = renameItem.name) },
+            onConfirm = {
+                renamePath = null
+                viewModel.rename(renameItem, it)
+            },
+            onDismiss = { renamePath = null },
         )
     }
 
@@ -192,6 +243,7 @@ private class FileRowActions(
     val open: (FileItem) -> Unit,
     val openWith: (FileItem) -> Unit,
     val share: (FileItem) -> Unit,
+    val rename: (FileItem) -> Unit,
     val toggleFavorite: (FileItem) -> Unit,
     val details: (FileItem) -> Unit,
 )
@@ -230,7 +282,7 @@ private fun Breadcrumb(crumbs: List<Crumb>, onJump: (String?) -> Unit) {
 /**
  * Une ligne = un seul élément TalkBack : nom, type, taille, date.
  * Appui double : ouvrir. Les autres actions sont des actions personnalisées TalkBack,
- * dans l'ordre : ouvrir avec, partager, (renommer, copier, déplacer, supprimer à venir), favori, détails.
+ * dans l'ordre : ouvrir avec, partager, renommer, (copier, déplacer, supprimer à venir), favori, détails.
  */
 @Composable
 private fun FileRow(
@@ -243,6 +295,7 @@ private fun FileRow(
     val openLabel = stringResource(R.string.action_open)
     val openWithLabel = stringResource(R.string.action_open_with)
     val shareLabel = stringResource(R.string.action_share)
+    val renameLabel = stringResource(R.string.action_rename)
     val favoriteLabel = stringResource(if (isFavorite) R.string.action_remove_favorite else R.string.action_add_favorite)
     val detailsLabel = stringResource(R.string.action_details)
 
@@ -260,7 +313,9 @@ private fun FileRow(
                         if (!item.isDirectory) {
                             add(CustomAccessibilityAction(openWithLabel) { actions.openWith(item); true })
                             add(CustomAccessibilityAction(shareLabel) { actions.share(item); true })
-                        } else {
+                        }
+                        add(CustomAccessibilityAction(renameLabel) { actions.rename(item); true })
+                        if (item.isDirectory) {
                             // Les favoris concernent les dossiers ; les fichiers favoris viendront avec l'onglet Favoris.
                             add(CustomAccessibilityAction(favoriteLabel) { actions.toggleFavorite(item); true })
                         }

@@ -6,9 +6,12 @@ import androidx.lifecycle.viewModelScope
 import io.github.thomaszimmer13.xfiles.R
 import io.github.thomaszimmer13.xfiles.XFilesApplication
 import io.github.thomaszimmer13.xfiles.data.source.FileItem
+import io.github.thomaszimmer13.xfiles.data.source.FileOperationException
 import io.github.thomaszimmer13.xfiles.domain.Breadcrumbs
 import io.github.thomaszimmer13.xfiles.domain.Crumb
 import io.github.thomaszimmer13.xfiles.domain.FileSorter
+import io.github.thomaszimmer13.xfiles.domain.NameCheck
+import io.github.thomaszimmer13.xfiles.domain.NameValidator
 import io.github.thomaszimmer13.xfiles.domain.SortKey
 import io.github.thomaszimmer13.xfiles.domain.SortOptions
 import io.github.thomaszimmer13.xfiles.ui.components.Announcer
@@ -28,6 +31,8 @@ data class FolderUiState(
     val error: Boolean = false,
     val favorites: Set<String> = emptySet(),
     val sort: SortOptions = SortOptions(),
+    /** Élément sur lequel placer le focus TalkBack (après une création ou un renommage). */
+    val focusRequest: String? = null,
 )
 
 /** Contenu du dossier affiché dans l'onglet Explorer. */
@@ -91,6 +96,62 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /** Contenu relu sans passer par l'état « Chargement… », pour ne pas faire perdre le focus. */
+    private suspend fun refreshQuietly(path: String) {
+        rawItems = fileSource.list(path, includeHidden = _state.value.sort.showHidden)
+        _state.update { it.copy(items = FileSorter.sort(rawItems, it.sort), error = false) }
+    }
+
+    fun consumeFocusRequest() {
+        _state.update { it.copy(focusRequest = null) }
+    }
+
+    /** Vérifie un nom avant création ou renommage ([current] = nom actuel en cas de renommage). */
+    fun checkName(name: String, current: String? = null): NameCheck =
+        NameValidator.check(name, rawItems.map { it.name }, current)
+
+    /** Nom proposé par défaut pour un nouveau dossier, sans doublon. */
+    fun suggestedFolderName(base: String): String = NameValidator.uniqueName(base, rawItems.map { it.name })
+
+    fun createFolder(name: String) {
+        val parent = _state.value.path ?: return
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            try {
+                val created = fileSource.createDirectory(parent, name)
+                refreshQuietly(parent)
+                _state.update { it.copy(focusRequest = created) }
+                announcer.announce(app.getString(R.string.folder_created, name))
+            } catch (e: FileOperationException) {
+                announcer.announce(app.getString(e.reason.message(), name))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                announcer.announce(app.getString(R.string.op_failed, name))
+            }
+        }
+    }
+
+    fun rename(item: FileItem, newName: String) {
+        val parent = _state.value.path ?: return
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            try {
+                val renamed = fileSource.rename(item.path, newName)
+                if (item.isDirectory) preferences.onPathRenamed(item.path, renamed)
+                refreshQuietly(parent)
+                _state.update { it.copy(focusRequest = renamed) }
+                announcer.announce(app.getString(R.string.renamed, newName))
+            } catch (e: FileOperationException) {
+                announcer.announce(app.getString(e.reason.message(), item.name))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                announcer.announce(app.getString(R.string.op_failed, item.name))
+            }
+        }
+    }
+
     /** Appelé par le dialogue « Trier et afficher » ; annonce le résultat. */
     fun applySort(options: SortOptions) {
         val previous = _state.value.sort
@@ -121,6 +182,14 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
     }
+}
+
+/** Message annoncé pour un échec d'opération (%1$s : nom concerné). */
+private fun FileOperationException.Reason.message(): Int = when (this) {
+    FileOperationException.Reason.ALREADY_EXISTS -> R.string.op_already_exists
+    FileOperationException.Reason.NOT_FOUND -> R.string.op_not_found
+    FileOperationException.Reason.DENIED -> R.string.op_denied
+    FileOperationException.Reason.FAILED -> R.string.op_failed
 }
 
 /** Libellé d'un critère de tri. */
