@@ -1,0 +1,89 @@
+name: Build APK
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write # nécessaire pour publier une release sur un tag
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      XFILES_VERSION_CODE: ${{ github.run_number }}
+      # Sur un tag v1.2.3 → 1.2.3 ; sinon 0.1.0-<sha court>
+      XFILES_VERSION_NAME: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('0.1.0-{0}', github.sha) }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Nom de version
+        run: |
+          name="$XFILES_VERSION_NAME"
+          name="${name#v}"           # v1.2.3 → 1.2.3
+          case "$name" in 0.1.0-*) name="0.1.0-${GITHUB_SHA::7}";; esac
+          echo "XFILES_VERSION_NAME=$name" >> "$GITHUB_ENV"
+          echo "Version : $name (code $XFILES_VERSION_CODE)"
+
+      - name: APK debug
+        run: ./gradlew assembleDebug --stacktrace
+
+      - name: Clé de signature
+        id: keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.XFILES_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "Pas de secret XFILES_KEYSTORE_BASE64 : APK release non signé ignoré."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/xfiles.jks"
+          echo "XFILES_KEYSTORE_FILE=$RUNNER_TEMP/xfiles.jks" >> "$GITHUB_ENV"
+          echo "available=true" >> "$GITHUB_OUTPUT"
+
+      - name: APK release signé
+        if: steps.keystore.outputs.available == 'true'
+        env:
+          XFILES_KEYSTORE_PASSWORD: ${{ secrets.XFILES_KEYSTORE_PASSWORD }}
+          XFILES_KEY_ALIAS: ${{ secrets.XFILES_KEY_ALIAS }}
+          XFILES_KEY_PASSWORD: ${{ secrets.XFILES_KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease --stacktrace
+          mv app/build/outputs/apk/release/app-release.apk \
+             "app/build/outputs/apk/release/xfiles-${XFILES_VERSION_NAME}.apk"
+
+      - name: Artefact debug
+        uses: actions/upload-artifact@v5
+        with:
+          name: xfiles-debug-${{ env.XFILES_VERSION_NAME }}
+          path: app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Artefact release
+        if: steps.keystore.outputs.available == 'true'
+        uses: actions/upload-artifact@v5
+        with:
+          name: xfiles-release-${{ env.XFILES_VERSION_NAME }}
+          path: app/build/outputs/apk/release/xfiles-*.apk
+
+      - name: Publication GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') && steps.keystore.outputs.available == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app/build/outputs/apk/release/xfiles-*.apk
+          generate_release_notes: true
+
+      - name: Nettoyage de la clé
+        if: always()
+        run: rm -f "$RUNNER_TEMP/xfiles.jks"

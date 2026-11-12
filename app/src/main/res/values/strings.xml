@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">XFiles</string>
+
+    <!-- Onglets du bas -->
+    <string name="tab_recents">Récents</string>
+    <string name="tab_favorites">Favoris</string>
+    <string name="tab_explorer">Explorer</string>
+
+    <!-- Contenus provisoires (étape 0) -->
+    <string name="empty_recents">Aucun fichier récent pour le moment.</string>
+    <string name="empty_favorites">Aucun favori pour le moment. Vous pourrez ajouter des dossiers et des fichiers depuis l\'onglet Explorer.</string>
+    <string name="placeholder_explorer">La navigation dans les fichiers arrive à la prochaine étape.</string>
+</resources>
