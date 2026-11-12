@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -45,6 +46,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.thomaszimmer13.xfiles.R
 import io.github.thomaszimmer13.xfiles.a11y.FileDescriptions
+import io.github.thomaszimmer13.xfiles.data.open.FileOpener
 import io.github.thomaszimmer13.xfiles.data.source.FileItem
 import io.github.thomaszimmer13.xfiles.domain.Crumb
 import io.github.thomaszimmer13.xfiles.ui.components.FocusOnceEffect
@@ -72,6 +74,35 @@ fun FolderScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val announcement by viewModel.announcer.message.collectAsStateWithLifecycle()
     var showSortDialog by rememberSaveable { mutableStateOf(false) }
+    // Chemin de l'élément dont les détails sont affichés (null = dialogue fermé).
+    var detailsPath by rememberSaveable { mutableStateOf<String?>(null) }
+
+    val context = LocalContext.current
+    val openWithTitle = stringResource(R.string.chooser_open_with)
+    val shareTitle = stringResource(R.string.chooser_share)
+    val noAppMessage = stringResource(R.string.open_no_app)
+    val failedMessage = stringResource(R.string.open_failed)
+    val pathCopiedMessage = stringResource(R.string.path_copied)
+    val pathLabel = stringResource(R.string.details_path)
+
+    /** Annonce le résultat d'une transmission à une autre app, s'il y a un problème. */
+    fun report(result: FileOpener.Result) {
+        when (result) {
+            FileOpener.Result.OK -> Unit
+            FileOpener.Result.NO_APP -> viewModel.announcer.announce(noAppMessage)
+            FileOpener.Result.FAILED -> viewModel.announcer.announce(failedMessage)
+        }
+    }
+
+    val actions = FileRowActions(
+        open = { item ->
+            if (item.isDirectory) onOpenFolder(item.path) else report(FileOpener.open(context, item.path, item.name))
+        },
+        openWith = { item -> report(FileOpener.open(context, item.path, item.name, chooserTitle = openWithTitle)) },
+        share = { item -> report(FileOpener.share(context, item.path, item.name, shareTitle)) },
+        toggleFavorite = viewModel::toggleFavorite,
+        details = { item -> detailsPath = item.path },
+    )
 
     // Tant que le ViewModel n'a pas basculé sur ce chemin, on n'affiche rien de l'ancien dossier.
     val ready = state.path == path
@@ -121,8 +152,7 @@ fun FolderScreen(
                             item = item,
                             isFavorite = item.path in state.favorites,
                             focusRequester = if (item.path == focusTarget) itemFocus else null,
-                            onOpenFolder = onOpenFolder,
-                            onToggleFavorite = viewModel::toggleFavorite,
+                            actions = actions,
                         )
                     }
                 }
@@ -141,7 +171,30 @@ fun FolderScreen(
             onDismiss = { showSortDialog = false },
         )
     }
+
+    val detailsItem = detailsPath?.let { p -> state.items.firstOrNull { it.path == p } }
+    if (detailsItem != null) {
+        DetailsDialog(
+            item = detailsItem,
+            parentCrumbs = state.crumbs,
+            onCopyPath = {
+                FileOpener.copyToClipboard(context, pathLabel, detailsItem.path)
+                detailsPath = null
+                viewModel.announcer.announce(pathCopiedMessage)
+            },
+            onDismiss = { detailsPath = null },
+        )
+    }
 }
+
+/** Actions possibles sur une ligne, regroupées pour alléger les paramètres. */
+private class FileRowActions(
+    val open: (FileItem) -> Unit,
+    val openWith: (FileItem) -> Unit,
+    val share: (FileItem) -> Unit,
+    val toggleFavorite: (FileItem) -> Unit,
+    val details: (FileItem) -> Unit,
+)
 
 /**
  * Fil d'Ariane : un seul élément TalkBack (« Emplacement : Mémoire interne, Documents, Factures »).
@@ -176,20 +229,22 @@ private fun Breadcrumb(crumbs: List<Crumb>, onJump: (String?) -> Unit) {
 
 /**
  * Une ligne = un seul élément TalkBack : nom, type, taille, date.
- * Les actions (favori pour l'instant ; ouvrir, partager, renommer… à l'étape 4) sont des
- * actions personnalisées TalkBack.
+ * Appui double : ouvrir. Les autres actions sont des actions personnalisées TalkBack,
+ * dans l'ordre : ouvrir avec, partager, (renommer, copier, déplacer, supprimer à venir), favori, détails.
  */
 @Composable
 private fun FileRow(
     item: FileItem,
     isFavorite: Boolean,
     focusRequester: FocusRequester?,
-    onOpenFolder: (String) -> Unit,
-    onToggleFavorite: (FileItem) -> Unit,
+    actions: FileRowActions,
 ) {
     val spoken = FileDescriptions.spoken(item)
     val openLabel = stringResource(R.string.action_open)
+    val openWithLabel = stringResource(R.string.action_open_with)
+    val shareLabel = stringResource(R.string.action_share)
     val favoriteLabel = stringResource(if (isFavorite) R.string.action_remove_favorite else R.string.action_add_favorite)
+    val detailsLabel = stringResource(R.string.action_details)
 
     Column {
         Row(
@@ -200,13 +255,19 @@ private fun FileRow(
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester).focusable() else Modifier)
                 .clearAndSetSemantics {
                     contentDescription = spoken
-                    if (item.isDirectory) {
-                        onClick(label = openLabel) { onOpenFolder(item.path); true }
-                        customActions = listOf(CustomAccessibilityAction(favoriteLabel) { onToggleFavorite(item); true })
+                    onClick(label = openLabel) { actions.open(item); true }
+                    customActions = buildList {
+                        if (!item.isDirectory) {
+                            add(CustomAccessibilityAction(openWithLabel) { actions.openWith(item); true })
+                            add(CustomAccessibilityAction(shareLabel) { actions.share(item); true })
+                        } else {
+                            // Les favoris concernent les dossiers ; les fichiers favoris viendront avec l'onglet Favoris.
+                            add(CustomAccessibilityAction(favoriteLabel) { actions.toggleFavorite(item); true })
+                        }
+                        add(CustomAccessibilityAction(detailsLabel) { actions.details(item); true })
                     }
                 }
-                // Les fichiers s'ouvriront à l'étape 4 ; pour l'instant seuls les dossiers réagissent.
-                .then(if (item.isDirectory) Modifier.clickable { onOpenFolder(item.path) } else Modifier)
+                .clickable { actions.open(item) }
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
             Icon(

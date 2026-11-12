@@ -39,6 +39,13 @@ object DateFormatter {
         }
     }
 
+    /** Date complète, pour les détails : « jeudi 12 novembre 2026 à 9 h 05 ». */
+    fun full(millis: Long, now: ZonedDateTime = ZonedDateTime.now()): String {
+        val date = Instant.ofEpochMilli(millis).atZone(now.zone)
+        val weekday = date.dayOfWeek.getDisplayName(TextStyle.FULL, locale)
+        return "$weekday ${dayMonth(date)} ${date.year} à ${date.hour} h ${"%02d".format(locale, date.minute)}"
+    }
+
     private fun daysBetween(date: ZonedDateTime, now: ZonedDateTime): Long =
         ChronoUnit.DAYS.between(date.toLocalDate(), now.toLocalDate())
 

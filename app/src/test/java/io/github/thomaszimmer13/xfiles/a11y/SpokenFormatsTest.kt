@@ -29,6 +29,8 @@ class SpokenFormatsTest {
         assertEquals("modifié le 3 mars 2024", DateFormatter.spoken(at(2024, 3, 3), now))
         assertEquals("Aujourd'hui 09:05", DateFormatter.short(at(2026, 11, 12, 9, 5), now))
         assertEquals("3 mars 2024", DateFormatter.short(at(2024, 3, 3), now))
+        assertEquals("jeudi 12 novembre 2026 à 9 h 05", DateFormatter.full(at(2026, 11, 12, 9, 5), now))
+        assertEquals("dimanche 1er mars 2026 à 14 h 00", DateFormatter.full(at(2026, 3, 1, 14), now))
     }
 
     @Test fun types() {

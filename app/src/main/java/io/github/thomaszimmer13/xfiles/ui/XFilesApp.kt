@@ -12,6 +12,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -67,6 +68,8 @@ private fun MainTabs() {
     val tabs = AppTab.entries
     // Chaque onglet garde son état (dossier ouvert, défilement) quand on passe à un autre, comme sur iOS.
     val tabStates = rememberSaveableStateHolder()
+    // Toucher l'onglet Explorer alors qu'il est déjà actif ramène à sa racine, comme sur iOS.
+    var explorerReset by rememberSaveable { mutableIntStateOf(0) }
 
     Scaffold(
         bottomBar = {
@@ -79,7 +82,13 @@ private fun MainTabs() {
                 tabs.forEachIndexed { index, tab ->
                     NavigationBarItem(
                         selected = tab == currentTab,
-                        onClick = { currentTab = tab },
+                        onClick = {
+                            if (tab == currentTab) {
+                                if (tab == AppTab.EXPLORER) explorerReset++
+                            } else {
+                                currentTab = tab
+                            }
+                        },
                         // L'icône est décorative : le libellé suffit.
                         icon = { Icon(painterResource(tab.icon), contentDescription = null) },
                         label = { Text(stringResource(tab.label)) },
@@ -106,7 +115,7 @@ private fun MainTabs() {
                 when (currentTab) {
                     AppTab.RECENTS -> PlaceholderTab(R.string.tab_recents, R.string.empty_recents)
                     AppTab.FAVORITES -> PlaceholderTab(R.string.tab_favorites, R.string.empty_favorites)
-                    AppTab.EXPLORER -> ExplorerScreen()
+                    AppTab.EXPLORER -> ExplorerScreen(resetSignal = explorerReset)
                 }
             }
         }

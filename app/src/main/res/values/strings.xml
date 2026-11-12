@@ -75,4 +75,33 @@
     <string name="sort_applied">Tri : %1$s, %2$s.</string>
     <string name="hidden_shown">Fichiers cachés affichés.</string>
     <string name="hidden_hidden">Fichiers cachés masqués.</string>
+
+    <!-- Ouvrir, partager -->
+    <string name="action_open_with">Ouvrir avec…</string>
+    <string name="action_share">Partager</string>
+    <string name="chooser_open_with">Ouvrir avec</string>
+    <string name="chooser_share">Partager</string>
+    <string name="open_no_app">Aucune application ne sait ouvrir ce fichier. Essayez l\'action « Ouvrir avec ».</string>
+    <string name="open_failed">Impossible de transmettre ce fichier à une autre application.</string>
+
+    <!-- Détails -->
+    <string name="action_details">Détails</string>
+    <string name="details_title">Détails</string>
+    <string name="details_name">Nom</string>
+    <string name="details_type">Type</string>
+    <string name="details_content">Contenu</string>
+    <string name="details_size">Taille</string>
+    <string name="details_mime">Type MIME</string>
+    <string name="details_modified">Modifié le</string>
+    <string name="details_location">Emplacement</string>
+    <string name="details_access">Accès</string>
+    <string name="details_path">Chemin</string>
+    <string name="access_read_write">Lecture et écriture</string>
+    <string name="access_read_only">Lecture seule</string>
+    <string name="access_none">Aucun accès</string>
+    <!-- Lu par TalkBack. %1$s : libellé, %2$s : valeur -->
+    <string name="details_row_spoken">%1$s : %2$s</string>
+    <string name="action_copy_path">Copier le chemin</string>
+    <string name="action_close">Fermer</string>
+    <string name="path_copied">Chemin copié dans le presse-papiers.</string>
 </resources>

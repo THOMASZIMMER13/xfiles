@@ -2,8 +2,10 @@ package io.github.thomaszimmer13.xfiles.ui.explorer
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.listSaver
@@ -15,9 +17,11 @@ import androidx.compose.runtime.toMutableStateList
 /**
  * Onglet Explorer : une pile de dossiers ouverts.
  * Pile vide = liste des emplacements ; sinon, le dernier dossier de la pile est affiché.
+ *
+ * @param resetSignal incrémenté quand l'onglet déjà actif est touché à nouveau : retour à la racine.
  */
 @Composable
-fun ExplorerScreen() {
+fun ExplorerScreen(resetSignal: Int = 0) {
     val stack: SnapshotStateList<String> = rememberSaveable(
         saver = listSaver(save = { it.toList() }, restore = { it.toMutableStateList() }),
     ) { mutableStateListOf() }
@@ -51,6 +55,19 @@ fun ExplorerScreen() {
     }
 
     BackHandler(enabled = current != null) { goUp() }
+
+    // Retour à la racine demandé par la barre d'onglets (signal déjà traité mémorisé pour ignorer
+    // la valeur initiale et les recompositions).
+    var handledReset by rememberSaveable { mutableIntStateOf(resetSignal) }
+    LaunchedEffect(resetSignal) {
+        if (resetSignal != handledReset) {
+            handledReset = resetSignal
+            if (stack.isNotEmpty()) {
+                cameFrom = null
+                stack.clear()
+            }
+        }
+    }
 
     // key : chaque dossier a son propre état d'écran (défilement, focus), recréé à chaque visite.
     key(current) {
