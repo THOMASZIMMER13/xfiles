@@ -14,6 +14,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -25,35 +26,49 @@ import androidx.compose.ui.semantics.CollectionItemInfo
 import androidx.compose.ui.semantics.collectionInfo
 import androidx.compose.ui.semantics.collectionItemInfo
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import io.github.thomaszimmer13.xfiles.R
+import io.github.thomaszimmer13.xfiles.data.permission.StorageAccess
+import io.github.thomaszimmer13.xfiles.ui.explorer.ExplorerRootScreen
+import io.github.thomaszimmer13.xfiles.ui.permission.PermissionScreen
 
 /**
- * Structure générale : titre en haut, contenu de l'onglet, barre d'onglets en bas.
- *
+ * Structure générale : titre en haut, contenu, barre d'onglets en bas.
  * Ordre de balayage TalkBack : titre (titre sémantique) → contenu → onglets.
+ *
+ * Sans l'accès à tous les fichiers, seul l'écran d'autorisation est affiché.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun XFilesApp() {
+    var hasAccess by remember { mutableStateOf(StorageAccess.isGranted()) }
+    // Vérifié à chaque retour dans l'app : l'utilisateur a pu accorder ou retirer l'accès.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { hasAccess = StorageAccess.isGranted() }
+
+    if (hasAccess) MainTabs() else PermissionGate()
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PermissionGate() {
+    Scaffold(
+        topBar = { TopAppBar(title = { ScreenTitle(stringResource(R.string.permission_title)) }) },
+    ) { innerPadding ->
+        PermissionScreen(Modifier.padding(innerPadding))
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun MainTabs() {
     var currentTab by rememberSaveable { mutableStateOf(AppTab.EXPLORER) }
     val tabs = AppTab.entries
-    val currentTitle = stringResource(currentTab.label)
 
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = currentTitle,
-                        modifier = Modifier.semantics { heading() },
-                    )
-                },
-            )
-        },
+        topBar = { TopAppBar(title = { ScreenTitle(stringResource(currentTab.label)) }) },
         bottomBar = {
             // collectionInfo : permet à TalkBack d'annoncer la position (« 1 sur 3 »).
             NavigationBar(
@@ -81,20 +96,24 @@ fun XFilesApp() {
             }
         },
     ) { innerPadding ->
-        // paneTitle : signale à TalkBack que le contenu principal a changé d'écran.
+        // Pas de paneTitle ici : TalkBack annonçait le titre en double avec l'onglet sélectionné.
         Box(
             modifier = Modifier
                 .padding(innerPadding)
-                .fillMaxSize()
-                .semantics { paneTitle = currentTitle },
+                .fillMaxSize(),
         ) {
             when (currentTab) {
                 AppTab.RECENTS -> PlaceholderTab(stringResource(R.string.empty_recents))
                 AppTab.FAVORITES -> PlaceholderTab(stringResource(R.string.empty_favorites))
-                AppTab.EXPLORER -> PlaceholderTab(stringResource(R.string.placeholder_explorer))
+                AppTab.EXPLORER -> ExplorerRootScreen()
             }
         }
     }
+}
+
+@Composable
+private fun ScreenTitle(text: String) {
+    Text(text = text, modifier = Modifier.semantics { heading() })
 }
 
 /** Contenu provisoire d'un onglet : un simple message lisible. */

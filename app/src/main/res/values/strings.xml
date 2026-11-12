@@ -7,8 +7,27 @@
     <string name="tab_favorites">Favoris</string>
     <string name="tab_explorer">Explorer</string>
 
-    <!-- Contenus provisoires (étape 0) -->
+    <!-- Contenus provisoires -->
     <string name="empty_recents">Aucun fichier récent pour le moment.</string>
     <string name="empty_favorites">Aucun favori pour le moment. Vous pourrez ajouter des dossiers et des fichiers depuis l\'onglet Explorer.</string>
-    <string name="placeholder_explorer">La navigation dans les fichiers arrive à la prochaine étape.</string>
+
+    <!-- Autorisation d'accès aux fichiers -->
+    <string name="permission_title">Accès aux fichiers</string>
+    <string name="permission_explanation">XFiles a besoin de l\'autorisation « Accès à tous les fichiers » pour afficher et gérer vos fichiers. Le bouton ci-dessous ouvre la page de réglage d\'Android : activez l\'interrupteur, puis revenez dans XFiles avec le geste Retour.</string>
+    <string name="permission_button">Ouvrir le réglage d\'accès aux fichiers</string>
+    <string name="permission_not_granted">L\'accès n\'est pas encore accordé. Ouvrez à nouveau le réglage et activez l\'interrupteur.</string>
+    <string name="permission_no_settings">Impossible d\'ouvrir le réglage sur ce téléphone. Accordez l\'accès dans Paramètres, Applications, XFiles, Autorisations.</string>
+
+    <!-- Racine d'Explorer -->
+    <string name="section_on_device">Sur l\'appareil</string>
+    <string name="location_internal">Stockage interne</string>
+    <string name="location_downloads">Téléchargements</string>
+    <string name="location_documents">Documents</string>
+    <!-- %1$s : espace libre, %2$s : capacité totale (abrégés, ex. « 34,2 Go ») -->
+    <string name="location_space">%1$s libres sur %2$s</string>
+    <!-- Lu par TalkBack. %1$s : nom, %2$s : espace libre, %3$s : capacité (en toutes lettres) -->
+    <string name="location_spoken_with_space">%1$s, %2$s libres sur %3$s</string>
+    <!-- Annonces de branchement / retrait. %1$s : nom du volume donné par Android -->
+    <string name="location_added">Nouvel emplacement : %1$s.</string>
+    <string name="location_removed">Emplacement retiré : %1$s.</string>
 </resources>
