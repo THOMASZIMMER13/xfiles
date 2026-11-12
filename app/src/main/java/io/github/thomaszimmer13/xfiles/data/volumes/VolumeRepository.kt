@@ -52,6 +52,17 @@ class VolumeRepository(private val context: Context) {
         return result
     }
 
+    /**
+     * Racines des volumes montés (nom, chemin), sans calcul d'espace libre.
+     * Sert au fil d'Ariane : « Stockage interne » plutôt que « /storage/emulated/0 ».
+     */
+    fun volumeRoots(): List<Pair<String, String>> =
+        storageManager.storageVolumes.filter { it.isMounted() }.mapNotNull { volume ->
+            val dir = volume.directory ?: return@mapNotNull null
+            val name = if (volume.isPrimary) context.getString(R.string.location_internal) else volume.getDescription(context)
+            name to dir.path
+        }
+
     /** Émet la liste à jour à chaque montage ou démontage de volume. */
     fun locations(): Flow<List<StorageLocation>> = callbackFlow {
         trySend(currentLocations())

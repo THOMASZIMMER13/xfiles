@@ -36,8 +36,8 @@ jobs:
           echo "XFILES_VERSION_NAME=$name" >> "$GITHUB_ENV"
           echo "Version : $name (code $XFILES_VERSION_CODE)"
 
-      - name: APK debug
-        run: ./gradlew assembleDebug --stacktrace
+      - name: Tests et APK debug
+        run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
 
       - name: Clé de signature
         id: keystore

@@ -30,4 +30,18 @@
     <!-- Annonces de branchement / retrait. %1$s : nom du volume donné par Android -->
     <string name="location_added">Nouvel emplacement : %1$s.</string>
     <string name="location_removed">Emplacement retiré : %1$s.</string>
+
+    <!-- Actions communes (les libellés d'action sont lus après « Appuyez deux fois pour ») -->
+    <string name="action_back">Retour</string>
+    <string name="action_open">ouvrir</string>
+
+    <!-- Dossiers -->
+    <string name="folder_loading">Chargement…</string>
+    <string name="folder_empty">Ce dossier est vide.</string>
+    <string name="folder_error">Impossible d\'ouvrir ce dossier.</string>
+
+    <!-- Fil d'Ariane. %1$s : liste des dossiers séparés par des virgules -->
+    <string name="breadcrumb_spoken">Emplacement : %1$s</string>
+    <string name="breadcrumb_go_to">Aller à %1$s</string>
+    <string name="breadcrumb_go_root">Aller aux emplacements</string>
 </resources>
