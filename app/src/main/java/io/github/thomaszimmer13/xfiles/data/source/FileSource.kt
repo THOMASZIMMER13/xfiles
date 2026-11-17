@@ -30,6 +30,9 @@ interface FileSource {
 
     /** Renomme un fichier ou un dossier ; renvoie le nouveau chemin. */
     suspend fun rename(path: String, newName: String): String
+
+    /** Supprime définitivement un fichier, ou un dossier et tout son contenu (sans corbeille). */
+    suspend fun delete(path: String)
 }
 
 class FolderNotReadableException(path: String) : IOException("Dossier illisible : $path")

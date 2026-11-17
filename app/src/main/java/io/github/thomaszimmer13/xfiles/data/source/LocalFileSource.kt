@@ -55,6 +55,14 @@ class LocalFileSource : FileSource {
             target.path
         }
 
+    override suspend fun delete(path: String) =
+        withContext(Dispatchers.IO) {
+            val file = File(path)
+            if (!file.exists()) fail(Reason.NOT_FOUND, file)
+            if (file.parentFile?.canWrite() == false) fail(Reason.DENIED, file)
+            if (!file.deleteRecursively()) fail(Reason.FAILED, file)
+        }
+
     private fun fail(reason: Reason, file: File): Nothing =
         throw FileOperationException(reason, "$reason : ${file.path}")
 

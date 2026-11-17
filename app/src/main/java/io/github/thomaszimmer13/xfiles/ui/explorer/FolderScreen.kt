@@ -79,6 +79,8 @@ fun FolderScreen(
     var showNewFolderDialog by rememberSaveable { mutableStateOf(false) }
     // Chemin de l'élément en cours de renommage (null = dialogue fermé).
     var renamePath by rememberSaveable { mutableStateOf<String?>(null) }
+    // Chemin de l'élément dont la mise à la corbeille est à confirmer.
+    var trashPath by rememberSaveable { mutableStateOf<String?>(null) }
 
     val context = LocalContext.current
     val openWithTitle = stringResource(R.string.chooser_open_with)
@@ -106,7 +108,7 @@ fun FolderScreen(
         rename = { item -> renamePath = item.path },
         toggleFavorite = viewModel::toggleFavorite,
         details = { item -> detailsPath = item.path },
-        moveToTrash = viewModel::moveToTrash,
+        moveToTrash = { item -> trashPath = item.path },
     )
 
     // Tant que le ViewModel n'a pas basculé sur ce chemin, on n'affiche rien de l'ancien dossier.
@@ -230,6 +232,22 @@ fun FolderScreen(
                 viewModel.rename(renameItem, it)
             },
             onDismiss = { renamePath = null },
+        )
+    }
+
+    val trashItem = trashPath?.let { p -> state.items.firstOrNull { it.path == p } }
+    if (trashItem != null) {
+        TrashConfirmDialog(
+            name = trashItem.name,
+            onMoveToTrash = {
+                trashPath = null
+                viewModel.moveToTrash(trashItem)
+            },
+            onDeleteForever = {
+                trashPath = null
+                viewModel.deleteForever(trashItem)
+            },
+            onDismiss = { trashPath = null },
         )
     }
 

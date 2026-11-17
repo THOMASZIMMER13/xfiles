@@ -190,6 +190,29 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /** Supprime définitivement l'élément, sans passer par la corbeille. */
+    fun deleteForever(item: FileItem) {
+        val parent = _state.value.path ?: return
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val focus = neighborFocus(_state.value.items, item.path) { it.path }
+            try {
+                fileSource.delete(item.path)
+                refreshQuietly(parent)
+                _state.update { it.copy(focusRequest = focus) }
+                announcer.announce(app.getString(R.string.deleted_forever, item.name))
+            } catch (e: FileOperationException) {
+                // Une suppression partielle a pu avoir lieu : on relit le dossier.
+                runCatching { refreshQuietly(parent) }
+                announcer.announce(app.getString(e.reason.message(), item.name))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                announcer.announce(app.getString(R.string.op_failed, item.name))
+            }
+        }
+    }
+
     /** Appelé par le dialogue « Trier et afficher » ; annonce le résultat. */
     fun applySort(options: SortOptions) {
         val previous = _state.value.sort
