@@ -15,16 +15,17 @@ object DateFormatter {
 
     private val locale = Locale.FRANCE
 
-    fun spoken(millis: Long, now: ZonedDateTime = ZonedDateTime.now()): String {
+    /** @param verb participe qui précède la date : « modifié », « supprimé »… */
+    fun spoken(millis: Long, now: ZonedDateTime = ZonedDateTime.now(), verb: String = "modifié"): String {
         val date = Instant.ofEpochMilli(millis).atZone(now.zone)
         val time = "${date.hour} h ${"%02d".format(locale, date.minute)}"
         return when (daysBetween(date, now)) {
-            0L -> "modifié aujourd'hui à $time"
-            1L -> "modifié hier à $time"
+            0L -> "$verb aujourd'hui à $time"
+            1L -> "$verb hier à $time"
             else -> if (date.year == now.year) {
-                "modifié le ${dayMonth(date)} à $time"
+                "$verb le ${dayMonth(date)} à $time"
             } else {
-                "modifié le ${dayMonth(date)} ${date.year}"
+                "$verb le ${dayMonth(date)} ${date.year}"
             }
         }
     }

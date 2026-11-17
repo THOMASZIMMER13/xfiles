@@ -1,6 +1,7 @@
 package io.github.thomaszimmer13.xfiles.data.source
 
 import io.github.thomaszimmer13.xfiles.data.source.FileOperationException.Reason
+import io.github.thomaszimmer13.xfiles.data.trash.LocalTrash
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -12,7 +13,8 @@ class LocalFileSource : FileSource {
         withContext(Dispatchers.IO) {
             val children = File(path).listFiles() ?: throw FolderNotReadableException(path)
             children
-                .filter { includeHidden || !it.isHidden() }
+                // La corbeille reste invisible, même quand les fichiers cachés sont affichés.
+                .filter { it.name != LocalTrash.DIR_NAME && (includeHidden || !it.isHidden()) }
                 .map { file -> file.toItem(includeHidden) }
         }
 
@@ -64,7 +66,7 @@ class LocalFileSource : FileSource {
             isDirectory = directory,
             sizeBytes = if (directory) 0 else length(),
             lastModified = lastModified(),
-            childCount = if (directory) list()?.count { includeHidden || !it.startsWith(".") } else null,
+            childCount = if (directory) list()?.count { it != LocalTrash.DIR_NAME && (includeHidden || !it.startsWith(".")) } else null,
         )
     }
 

@@ -48,12 +48,18 @@ object NameValidator {
         return if (problem == null) NameCheck.Valid(name) else NameCheck.Invalid(problem)
     }
 
-    /** « Nouveau dossier », ou « Nouveau dossier 2 », « 3 »… s'il existe déjà. */
-    fun uniqueName(base: String, existing: Collection<String>): String {
+    /**
+     * « Nouveau dossier », ou « Nouveau dossier 2 », « 3 »… s'il existe déjà.
+     * Avec [keepExtension], le numéro s'insère avant l'extension : « Facture 2.pdf ».
+     */
+    fun uniqueName(name: String, existing: Collection<String>, keepExtension: Boolean = false): String {
         val taken = existing.map { it.lowercase(Locale.ROOT) }.toSet()
-        if (base.lowercase(Locale.ROOT) !in taken) return base
+        if (name.lowercase(Locale.ROOT) !in taken) return name
+        val dot = if (keepExtension) name.lastIndexOf('.').takeIf { it > 0 } ?: name.length else name.length
+        val base = name.substring(0, dot)
+        val extension = name.substring(dot)
         var n = 2
-        while ("$base $n".lowercase(Locale.ROOT) in taken) n++
-        return "$base $n"
+        while ("$base $n$extension".lowercase(Locale.ROOT) in taken) n++
+        return "$base $n$extension"
     }
 }

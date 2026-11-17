@@ -33,5 +33,7 @@ class NameValidatorTest {
     @Test fun uniqueName() {
         assertEquals("Nouveau dossier 2", NameValidator.uniqueName("Nouveau dossier", existing))
         assertEquals("Scripts", NameValidator.uniqueName("Scripts", existing))
+        assertEquals("Facture 2.pdf", NameValidator.uniqueName("Facture.pdf", existing, keepExtension = true))
+        assertEquals("Photos 2", NameValidator.uniqueName("Photos", existing, keepExtension = true))
     }
 }

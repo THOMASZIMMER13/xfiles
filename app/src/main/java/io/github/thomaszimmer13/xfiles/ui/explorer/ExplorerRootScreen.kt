@@ -40,6 +40,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.thomaszimmer13.xfiles.R
+import io.github.thomaszimmer13.xfiles.a11y.FileDescriptions
 import io.github.thomaszimmer13.xfiles.a11y.SizeFormatter
 import io.github.thomaszimmer13.xfiles.data.volumes.LocationKind
 import io.github.thomaszimmer13.xfiles.data.volumes.StorageLocation
@@ -66,14 +67,16 @@ fun ExplorerRootScreen(
     // L'espace libre et l'existence des favoris ont pu changer pendant que l'app était en arrière-plan.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
 
-    // Indices dans la liste : 0 = titre « Sur l'appareil », puis les volumes,
+    // Indices dans la liste : 0 = titre « Sur l'appareil », puis les volumes, la corbeille,
     // puis le titre « Favoris » et les favoris.
-    val favoritesStart = 1 + state.locations.size + 1
+    val trashIndex = 1 + state.locations.size
+    val favoritesStart = trashIndex + 2
     val listState = rememberLazyListState()
     val rowFocus = remember { FocusRequester() }
 
     // Un favori exact (ex. Documents) a priorité sur le volume qui le contient.
     val focusIndex: Int? = focusPath?.let { target ->
+        if (target == TRASH_ROUTE) return@let trashIndex
         state.favorites.indexOfFirst { it.path == target }.takeIf { it >= 0 }?.let { favoritesStart + it }
             ?: state.locations.indexOfFirst { it.path == target }.takeIf { it >= 0 }?.let { 1 + it }
             ?: state.locations.withIndex()
@@ -104,6 +107,13 @@ fun ExplorerRootScreen(
                     location = location,
                     focusRequester = if (focusIndex == 1 + state.locations.indexOf(location)) rowFocus else null,
                     onOpen = onOpen,
+                )
+            }
+            item(key = "trash") {
+                TrashRow(
+                    count = state.trashCount,
+                    focusRequester = if (focusIndex == trashIndex) rowFocus else null,
+                    onOpen = { onOpen(TRASH_ROUTE) },
                 )
             }
             if (state.favorites.isNotEmpty()) {
@@ -151,6 +161,25 @@ private fun LocationRow(location: StorageLocation, focusRequester: FocusRequeste
         semantics = {
             contentDescription = spoken
             onClick(label = openLabel) { onOpen(location.path); true }
+        },
+    )
+}
+
+/** « Corbeille, 3 éléments » ; le nombre n'est pas lu tant qu'il n'est pas connu. */
+@Composable
+private fun TrashRow(count: Int?, focusRequester: FocusRequester?, onOpen: () -> Unit) {
+    val title = stringResource(R.string.trash_title)
+    val detail = count?.let(FileDescriptions::itemCount)
+    val openLabel = stringResource(R.string.action_open)
+    RootRow(
+        icon = R.drawable.ic_delete,
+        title = title,
+        detail = detail,
+        focusRequester = focusRequester,
+        onClick = onOpen,
+        semantics = {
+            contentDescription = if (detail == null) title else "$title, $detail"
+            onClick(label = openLabel) { onOpen(); true }
         },
     )
 }

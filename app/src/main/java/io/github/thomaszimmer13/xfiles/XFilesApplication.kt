@@ -4,6 +4,7 @@ import android.app.Application
 import io.github.thomaszimmer13.xfiles.data.prefs.PreferencesRepository
 import io.github.thomaszimmer13.xfiles.data.source.FileSource
 import io.github.thomaszimmer13.xfiles.data.source.LocalFileSource
+import io.github.thomaszimmer13.xfiles.data.trash.LocalTrash
 import io.github.thomaszimmer13.xfiles.data.volumes.VolumeRepository
 
 class XFilesApplication : Application() {
@@ -23,4 +24,7 @@ class AppContainer(application: Application) {
 
     /** Pour l'instant une seule source ; un routeur choisira plus tard selon le chemin (Shizuku…). */
     val fileSource: FileSource = LocalFileSource()
+
+    /** Corbeille du stockage local, une par volume. */
+    val trash = LocalTrash({ volumeRepository.volumeRoots().map { it.second } })
 }

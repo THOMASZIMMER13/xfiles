@@ -13,6 +13,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
+import io.github.thomaszimmer13.xfiles.ui.trash.TrashScreen
+
+/** Entrée de pile qui désigne la corbeille (ce n'est pas un chemin de dossier). */
+const val TRASH_ROUTE = "xfiles:corbeille"
 
 /**
  * Onglet Explorer : une pile de dossiers ouverts.
@@ -73,6 +77,8 @@ fun ExplorerScreen(resetSignal: Int = 0) {
     key(current) {
         if (current == null) {
             ExplorerRootScreen(onOpen = ::open, focusPath = cameFrom)
+        } else if (current == TRASH_ROUTE) {
+            TrashScreen(onBack = ::goUp)
         } else {
             FolderScreen(
                 path = current,

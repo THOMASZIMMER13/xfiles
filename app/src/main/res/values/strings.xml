@@ -129,4 +129,34 @@
     <string name="op_not_found">%1$s n\'existe plus.</string>
     <string name="op_denied">Action refusée : cet emplacement est en lecture seule.</string>
     <string name="op_failed">L\'opération sur %1$s a échoué.</string>
+
+    <!-- Corbeille -->
+    <string name="trash_title">Corbeille</string>
+    <string name="action_move_to_trash">Mettre à la corbeille</string>
+    <!-- %1$s : nom de l'élément -->
+    <string name="moved_to_trash">%1$s mis à la corbeille.</string>
+    <!-- Doit rester cohérent avec LocalTrash.RETENTION_DAYS -->
+    <string name="trash_retention">Les éléments sont supprimés définitivement au bout de 30 jours.</string>
+    <string name="trash_empty">La corbeille est vide.</string>
+    <string name="action_empty_trash">Vider la corbeille</string>
+    <string name="action_restore">Restaurer</string>
+    <string name="action_delete_forever">Supprimer définitivement</string>
+    <string name="action_delete">Supprimer</string>
+    <!-- Lu après « Appuyez deux fois pour » -->
+    <string name="action_choose">choisir une action</string>
+    <!-- %1$s : nom, %2$s : dossier d'origine -->
+    <string name="restored">%1$s restauré dans %2$s.</string>
+    <!-- %1$s : nom d'origine, %2$s : dossier, %3$s : nouveau nom (le nom d'origine était déjà pris) -->
+    <string name="restored_renamed">%1$s restauré dans %2$s sous le nom %3$s.</string>
+    <string name="deleted_forever">%1$s supprimé définitivement.</string>
+    <string name="trash_emptied">Corbeille vidée.</string>
+    <string name="trash_empty_failed">Certains éléments n\'ont pas pu être supprimés.</string>
+    <string name="confirm_delete_title">Supprimer définitivement ?</string>
+    <string name="confirm_delete_message">%1$s sera supprimé définitivement. Cette action est irréversible.</string>
+    <string name="confirm_empty_title">Vider la corbeille ?</string>
+    <plurals name="confirm_empty_message">
+        <item quantity="one">L\'élément de la corbeille sera supprimé définitivement. Cette action est irréversible.</item>
+        <item quantity="many">Les %1$d éléments de la corbeille seront supprimés définitivement. Cette action est irréversible.</item>
+        <item quantity="other">Les %1$d éléments de la corbeille seront supprimés définitivement. Cette action est irréversible.</item>
+    </plurals>
 </resources>

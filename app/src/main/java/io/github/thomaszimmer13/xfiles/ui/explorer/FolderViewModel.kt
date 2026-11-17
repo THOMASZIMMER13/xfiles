@@ -16,12 +16,14 @@ import io.github.thomaszimmer13.xfiles.domain.SortKey
 import io.github.thomaszimmer13.xfiles.domain.SortOptions
 import io.github.thomaszimmer13.xfiles.ui.components.Announcer
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class FolderUiState(
     val path: String? = null,
@@ -31,9 +33,23 @@ data class FolderUiState(
     val error: Boolean = false,
     val favorites: Set<String> = emptySet(),
     val sort: SortOptions = SortOptions(),
-    /** Élément sur lequel placer le focus TalkBack (après une création ou un renommage). */
-    val focusRequest: String? = null,
+    /** Où placer le focus TalkBack après une création, un renommage ou une suppression. */
+    val focusRequest: FocusRequest? = null,
 )
+
+sealed interface FocusRequest {
+    data class Item(val path: String) : FocusRequest
+
+    /** Titre de l'écran (la liste est devenue vide). */
+    data object Title : FocusRequest
+}
+
+/** Élément voisin de [path] dans [items] (le suivant, sinon le précédent), pour y poser le focus après sa disparition. */
+internal fun <T> neighborFocus(items: List<T>, path: String, pathOf: (T) -> String): FocusRequest {
+    val index = items.indexOfFirst { pathOf(it) == path }
+    val neighbor = items.getOrNull(index + 1) ?: items.getOrNull(index - 1)
+    return if (index < 0 || neighbor == null) FocusRequest.Title else FocusRequest.Item(pathOf(neighbor))
+}
 
 /** Contenu du dossier affiché dans l'onglet Explorer. */
 class FolderViewModel(application: Application) : AndroidViewModel(application) {
@@ -42,6 +58,7 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
     private val fileSource = container.fileSource
     private val volumes = container.volumeRepository
     private val preferences = container.preferences
+    private val trash = container.trash
 
     private val _state = MutableStateFlow(FolderUiState())
     val state: StateFlow<FolderUiState> = _state.asStateFlow()
@@ -120,7 +137,7 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
             try {
                 val created = fileSource.createDirectory(parent, name)
                 refreshQuietly(parent)
-                _state.update { it.copy(focusRequest = created) }
+                _state.update { it.copy(focusRequest = FocusRequest.Item(created)) }
                 announcer.announce(app.getString(R.string.folder_created, name))
             } catch (e: FileOperationException) {
                 announcer.announce(app.getString(e.reason.message(), name))
@@ -140,8 +157,29 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
                 val renamed = fileSource.rename(item.path, newName)
                 if (item.isDirectory) preferences.onPathRenamed(item.path, renamed)
                 refreshQuietly(parent)
-                _state.update { it.copy(focusRequest = renamed) }
+                _state.update { it.copy(focusRequest = FocusRequest.Item(renamed)) }
                 announcer.announce(app.getString(R.string.renamed, newName))
+            } catch (e: FileOperationException) {
+                announcer.announce(app.getString(e.reason.message(), item.name))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                announcer.announce(app.getString(R.string.op_failed, item.name))
+            }
+        }
+    }
+
+    /** Met l'élément à la corbeille de son volume ; le focus passe à l'élément voisin. */
+    fun moveToTrash(item: FileItem) {
+        val parent = _state.value.path ?: return
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val focus = neighborFocus(_state.value.items, item.path) { it.path }
+            try {
+                withContext(Dispatchers.IO) { trash.moveToTrash(item.path) }
+                refreshQuietly(parent)
+                _state.update { it.copy(focusRequest = focus) }
+                announcer.announce(app.getString(R.string.moved_to_trash, item.name))
             } catch (e: FileOperationException) {
                 announcer.announce(app.getString(e.reason.message(), item.name))
             } catch (e: CancellationException) {
@@ -185,7 +223,7 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
 }
 
 /** Message annoncé pour un échec d'opération (%1$s : nom concerné). */
-private fun FileOperationException.Reason.message(): Int = when (this) {
+internal fun FileOperationException.Reason.message(): Int = when (this) {
     FileOperationException.Reason.ALREADY_EXISTS -> R.string.op_already_exists
     FileOperationException.Reason.NOT_FOUND -> R.string.op_not_found
     FileOperationException.Reason.DENIED -> R.string.op_denied

@@ -30,6 +30,8 @@ data class FavoriteFolder(
 data class ExplorerRootUiState(
     val locations: List<StorageLocation> = emptyList(),
     val favorites: List<FavoriteFolder> = emptyList(),
+    /** Nombre d'éléments dans la corbeille ; null tant qu'il n'est pas connu. */
+    val trashCount: Int? = null,
 )
 
 class ExplorerRootViewModel(application: Application) : AndroidViewModel(application) {
@@ -37,6 +39,7 @@ class ExplorerRootViewModel(application: Application) : AndroidViewModel(applica
     private val container = (application as XFilesApplication).container
     private val volumes = container.volumeRepository
     private val preferences = container.preferences
+    private val trash = container.trash
 
     private val _state = MutableStateFlow(ExplorerRootUiState())
     val state: StateFlow<ExplorerRootUiState> = _state.asStateFlow()
@@ -57,6 +60,11 @@ class ExplorerRootViewModel(application: Application) : AndroidViewModel(applica
                 refreshFavorites()
             }
         }
+        viewModelScope.launch {
+            // Une fois par lancement : suppression des éléments de plus de 30 jours.
+            withContext(Dispatchers.IO) { runCatching { trash.purgeExpired() } }
+            refreshTrashCount()
+        }
     }
 
     /** À appeler au retour dans l'app : espace libre et existence des favoris ont pu changer. */
@@ -64,7 +72,13 @@ class ExplorerRootViewModel(application: Application) : AndroidViewModel(applica
         viewModelScope.launch {
             applyLocations(withContext(Dispatchers.IO) { volumes.currentLocations() })
             refreshFavorites()
+            refreshTrashCount()
         }
+    }
+
+    private suspend fun refreshTrashCount() {
+        val count = withContext(Dispatchers.IO) { runCatching { trash.count() }.getOrDefault(0) }
+        _state.update { it.copy(trashCount = count) }
     }
 
     fun removeFavorite(favorite: FavoriteFolder) {

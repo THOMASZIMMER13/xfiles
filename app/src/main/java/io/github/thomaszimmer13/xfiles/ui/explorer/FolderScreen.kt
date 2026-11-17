@@ -106,6 +106,7 @@ fun FolderScreen(
         rename = { item -> renamePath = item.path },
         toggleFavorite = viewModel::toggleFavorite,
         details = { item -> detailsPath = item.path },
+        moveToTrash = viewModel::moveToTrash,
     )
 
     // Tant que le ViewModel n'a pas basculé sur ce chemin, on n'affiche rien de l'ancien dossier.
@@ -131,15 +132,24 @@ fun FolderScreen(
         }
     }
 
-    // Après une création ou un renommage : focus sur l'élément concerné.
+    // Après une création, un renommage ou une suppression : focus sur l'élément concerné.
     val focusRequest = state.focusRequest
+    val focusRequestPath = (focusRequest as? FocusRequest.Item)?.path
     LaunchedEffect(focusRequest, state.items) {
-        val target = focusRequest ?: return@LaunchedEffect
-        val index = state.items.indexOfFirst { it.path == target }
-        if (index < 0) return@LaunchedEffect
-        listState.scrollToItem(index)
-        withFrameNanos { }
-        runCatching { itemFocus.requestFocus() }
+        when (focusRequest) {
+            null -> return@LaunchedEffect
+            FocusRequest.Title -> {
+                withFrameNanos { }
+                runCatching { titleFocus.requestFocus() }
+            }
+            is FocusRequest.Item -> {
+                val index = state.items.indexOfFirst { it.path == focusRequest.path }
+                if (index < 0) return@LaunchedEffect
+                listState.scrollToItem(index)
+                withFrameNanos { }
+                runCatching { itemFocus.requestFocus() }
+            }
+        }
         viewModel.consumeFocusRequest()
     }
 
@@ -170,7 +180,7 @@ fun FolderScreen(
                         FileRow(
                             item = item,
                             isFavorite = item.path in state.favorites,
-                            focusRequester = if (item.path == (focusRequest ?: focusTarget)) itemFocus else null,
+                            focusRequester = if (item.path == (focusRequestPath ?: focusTarget)) itemFocus else null,
                             actions = actions,
                         )
                     }
@@ -246,6 +256,7 @@ private class FileRowActions(
     val rename: (FileItem) -> Unit,
     val toggleFavorite: (FileItem) -> Unit,
     val details: (FileItem) -> Unit,
+    val moveToTrash: (FileItem) -> Unit,
 )
 
 /**
@@ -282,7 +293,8 @@ private fun Breadcrumb(crumbs: List<Crumb>, onJump: (String?) -> Unit) {
 /**
  * Une ligne = un seul élément TalkBack : nom, type, taille, date.
  * Appui double : ouvrir. Les autres actions sont des actions personnalisées TalkBack,
- * dans l'ordre : ouvrir avec, partager, renommer, (copier, déplacer, supprimer à venir), favori, détails.
+ * dans l'ordre : ouvrir avec, partager, renommer, (copier, déplacer à venir), favori, détails,
+ * et en dernier, comme sur iOS, mettre à la corbeille (moins de risque de le déclencher par erreur).
  */
 @Composable
 private fun FileRow(
@@ -298,6 +310,7 @@ private fun FileRow(
     val renameLabel = stringResource(R.string.action_rename)
     val favoriteLabel = stringResource(if (isFavorite) R.string.action_remove_favorite else R.string.action_add_favorite)
     val detailsLabel = stringResource(R.string.action_details)
+    val trashLabel = stringResource(R.string.action_move_to_trash)
 
     Column {
         Row(
@@ -320,6 +333,7 @@ private fun FileRow(
                             add(CustomAccessibilityAction(favoriteLabel) { actions.toggleFavorite(item); true })
                         }
                         add(CustomAccessibilityAction(detailsLabel) { actions.details(item); true })
+                        add(CustomAccessibilityAction(trashLabel) { actions.moveToTrash(item); true })
                     }
                 }
                 .clickable { actions.open(item) }
