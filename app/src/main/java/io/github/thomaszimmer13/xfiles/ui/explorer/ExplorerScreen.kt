@@ -1,93 +1,20 @@
 package io.github.thomaszimmer13.xfiles.ui.explorer
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.listSaver
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshots.SnapshotStateList
-import androidx.compose.runtime.toMutableStateList
-import io.github.thomaszimmer13.xfiles.ui.trash.TrashScreen
+import io.github.thomaszimmer13.xfiles.ui.browser.BrowserStack
+import io.github.thomaszimmer13.xfiles.ui.browser.Routes
 
-/** Entrée de pile qui désigne la corbeille (ce n'est pas un chemin de dossier). */
-const val TRASH_ROUTE = "xfiles:corbeille"
+/** Route de la corbeille dans la pile de l'onglet. */
+const val TRASH_ROUTE = Routes.TRASH
 
 /**
- * Onglet Explorer : une pile de dossiers ouverts.
- * Pile vide = liste des emplacements ; sinon, le dernier dossier de la pile est affiché.
- *
+ * Onglet Explorer : racine (emplacements, corbeille, favoris), puis les dossiers ouverts.
  * @param resetSignal incrémenté quand l'onglet déjà actif est touché à nouveau : retour à la racine.
  */
 @Composable
 fun ExplorerScreen(resetSignal: Int = 0) {
-    val stack: SnapshotStateList<String> = rememberSaveable(
-        saver = listSaver(save = { it.toList() }, restore = { it.toMutableStateList() }),
-    ) { mutableStateListOf() }
-
-    // Chemin d'où l'on vient lors d'une remontée : le focus TalkBack y sera replacé.
-    var cameFrom by rememberSaveable { mutableStateOf<String?>(null) }
-    val current = stack.lastOrNull()
-
-    fun open(path: String) {
-        cameFrom = null
-        stack.add(path)
-    }
-
-    fun goUp() {
-        if (stack.isEmpty()) return
-        cameFrom = stack.removeAt(stack.lastIndex)
-    }
-
-    /** Saut direct vers un dossier parent (fil d'Ariane) ; null = liste des emplacements. */
-    fun jumpTo(target: String?) {
-        val from = stack.lastOrNull() ?: return
-        cameFrom = from
-        if (target == null) {
-            stack.clear()
-            return
-        }
-        while (stack.isNotEmpty() && stack.last() != target && stack.last().startsWith("$target/")) {
-            stack.removeAt(stack.lastIndex)
-        }
-        if (stack.lastOrNull() != target) stack.add(target)
-    }
-
-    BackHandler(enabled = current != null) { goUp() }
-
-    // Retour à la racine demandé par la barre d'onglets (signal déjà traité mémorisé pour ignorer
-    // la valeur initiale et les recompositions).
-    var handledReset by rememberSaveable { mutableIntStateOf(resetSignal) }
-    LaunchedEffect(resetSignal) {
-        if (resetSignal != handledReset) {
-            handledReset = resetSignal
-            if (stack.isNotEmpty()) {
-                cameFrom = null
-                stack.clear()
-            }
-        }
-    }
-
-    // key : chaque dossier a son propre état d'écran (défilement, focus), recréé à chaque visite.
-    key(current) {
-        if (current == null) {
-            ExplorerRootScreen(onOpen = ::open, focusPath = cameFrom)
-        } else if (current == TRASH_ROUTE) {
-            TrashScreen(onBack = ::goUp)
-        } else {
-            FolderScreen(
-                path = current,
-                focusPath = cameFrom,
-                onOpenFolder = ::open,
-                onBack = ::goUp,
-                onJump = ::jumpTo,
-            )
-        }
+    BrowserStack(resetSignal) { open, _, focusPath ->
+        ExplorerRootScreen(onOpen = open, focusPath = focusPath)
     }
 }
 

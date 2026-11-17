@@ -10,6 +10,12 @@
     <!-- Installer un APK ouvert depuis XFiles (Android demande ensuite l'accord de l'utilisateur). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Copies, extractions et compressions longues : elles continuent quand on quitte l'app. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Notification de progression (Android 13 et plus). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:name=".XFilesApplication"
         android:allowBackup="false"
@@ -28,6 +34,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".data.transfer.TransferService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!-- Donne aux autres apps un accès temporaire au fichier ouvert ou partagé. -->
         <provider

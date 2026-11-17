@@ -92,7 +92,8 @@ class ExplorerRootViewModel(application: Application) : AndroidViewModel(applica
         val paths = favoritePaths
         val favorites = withContext(Dispatchers.IO) {
             val roots = volumes.volumeRoots()
-            paths.map { path ->
+            // Ici, seulement les dossiers ; les fichiers favoris sont dans l'onglet Favoris.
+            paths.filterNot { File(it).isFile }.map { path ->
                 val crumbs = Breadcrumbs.of(path, roots)
                 FavoriteFolder(
                     path = path,

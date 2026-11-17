@@ -66,18 +66,21 @@ class LocalFileSource : FileSource {
     private fun fail(reason: Reason, file: File): Nothing =
         throw FileOperationException(reason, "$reason : ${file.path}")
 
-    private fun File.toItem(includeHidden: Boolean): FileItem {
-        val directory = isDirectory
-        return FileItem(
-            path = path,
-            name = name,
-            isDirectory = directory,
-            sizeBytes = if (directory) 0 else length(),
-            lastModified = lastModified(),
-            childCount = if (directory) list()?.count { it != LocalTrash.DIR_NAME && (includeHidden || !it.startsWith(".")) } else null,
-        )
-    }
+    private fun File.toItem(includeHidden: Boolean): FileItem = fileItemOf(this, includeHidden)
 
     /** Convention Unix : un nom commençant par un point est caché. */
     private fun File.isHidden(): Boolean = name.startsWith(".")
+}
+
+/** Description d'un fichier ou d'un dossier du stockage local (recherche, récents, favoris…). */
+fun fileItemOf(file: File, includeHidden: Boolean = false): FileItem {
+    val directory = file.isDirectory
+    return FileItem(
+        path = file.path,
+        name = file.name,
+        isDirectory = directory,
+        sizeBytes = if (directory) 0 else file.length(),
+        lastModified = file.lastModified(),
+        childCount = if (directory) file.list()?.count { it != LocalTrash.DIR_NAME && (includeHidden || !it.startsWith(".")) } else null,
+    )
 }

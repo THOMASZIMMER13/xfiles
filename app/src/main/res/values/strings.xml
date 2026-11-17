@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">XFiles</string>
 
     <!-- Onglets du bas -->
@@ -8,8 +8,8 @@
     <string name="tab_explorer">Explorer</string>
 
     <!-- Contenus provisoires -->
-    <string name="empty_recents">Aucun fichier récent pour le moment.</string>
-    <string name="empty_favorites">Aucun favori pour le moment. Vous pourrez ajouter des dossiers et des fichiers depuis l\'onglet Explorer.</string>
+    <string name="empty_recents">Aucun fichier récent pour le moment. Les fichiers que vous ouvrez depuis XFiles et ceux modifiés ces 7 derniers jours apparaîtront ici.</string>
+    <string name="empty_favorites">Aucun favori pour le moment. Dans l\'onglet Explorer, utilisez l\'action « Ajouter aux favoris » sur un dossier ou un fichier.</string>
 
     <!-- Autorisation d'accès aux fichiers -->
     <string name="permission_title">Accès aux fichiers</string>
@@ -233,9 +233,6 @@
         <item quantity="many">Presse-papiers : %1$d éléments à déplacer</item>
         <item quantity="other">Presse-papiers : %1$d éléments à déplacer</item>
     </plurals>
-    <string name="paste_in_progress_copy">Copie en cours…</string>
-    <string name="paste_in_progress_move">Déplacement en cours…</string>
-    <string name="paste_cancelled">Collage annulé.</string>
     <!-- %1$d : nombre, %2$s : nom (un seul élément), %3$s : dossier de destination -->
     <plurals name="pasted_copy">
         <item quantity="one">%2$s copié dans %3$s.</item>
@@ -271,4 +268,66 @@
         <item quantity="many">Appliquer aussi aux %1$d autres conflits</item>
         <item quantity="other">Appliquer aussi aux %1$d autres conflits</item>
     </plurals>
+
+    <!-- Opérations longues (copie, déplacement, extraction, compression) -->
+    <string name="notification_channel_transfers">Transferts de fichiers</string>
+    <!-- %1$s : « 3 éléments » ou nom, %2$s : dossier de destination -->
+    <string name="started_copy">Copie de %1$s vers %2$s</string>
+    <string name="started_move">Déplacement de %1$s vers %2$s</string>
+    <string name="started_extract">Extraction de %1$s dans %2$s</string>
+    <string name="started_compress">Compression de %1$s dans %2$s</string>
+    <string name="progress_percent">%1$d %%</string>
+    <string name="operation_cancelled">Opération annulée.</string>
+    <string name="transfer_busy">Une autre opération est en cours. Attendez sa fin ou annulez-la depuis le bandeau en bas de l\'écran.</string>
+    <plurals name="items_count">
+        <item quantity="one">%1$d élément</item>
+        <item quantity="many">%1$d éléments</item>
+        <item quantity="other">%1$d éléments</item>
+    </plurals>
+
+    <!-- Archives zip -->
+    <string name="archive_kind">archive</string>
+    <string name="archive_default_name">Archive</string>
+    <string name="action_extract">Extraire</string>
+    <string name="action_extract_here">Extraire ici</string>
+    <string name="action_extract_all">Tout extraire</string>
+    <string name="action_compress">Compresser</string>
+    <!-- %1$s : archive ou élément extrait, %2$s : dossier créé, %3$s : dossier de destination -->
+    <string name="extracted">%1$s extrait dans %3$s, sous le nom %2$s.</string>
+    <!-- %1$s : nom de l\'archive, %2$s : dossier de destination -->
+    <string name="compressed">Archive %1$s créée dans %2$s.</string>
+    <string name="op_encrypted">%1$s est protégé par un mot de passe : ce type d\'archive n\'est pas encore pris en charge.</string>
+    <string name="op_bad_archive">Impossible de lire l\'archive %1$s : elle est peut-être abîmée.</string>
+
+    <!-- Recherche -->
+    <string name="action_search">Rechercher</string>
+    <string name="search_everywhere">Rechercher dans tous les emplacements</string>
+    <!-- %1$s : dossier -->
+    <string name="search_in">Rechercher dans %1$s</string>
+    <string name="search_label">Nom du fichier ou du dossier</string>
+    <string name="search_hint">Tapez une partie du nom. Les majuscules et les accents ne comptent pas.</string>
+    <string name="search_running">Recherche en cours…</string>
+    <string name="search_none">Aucun résultat.</string>
+    <!-- %1$d : nombre maximal de résultats affichés (toujours plusieurs centaines) -->
+    <string name="search_truncated" tools:ignore="PluralsCandidate">Plus de %1$d résultats : précisez la recherche.</string>
+    <plurals name="search_count">
+        <item quantity="one">%1$d résultat.</item>
+        <item quantity="many">%1$d résultats.</item>
+        <item quantity="other">%1$d résultats.</item>
+    </plurals>
+    <string name="action_reveal">Afficher dans le dossier</string>
+
+    <!-- Récents et favoris -->
+    <string name="section_recent_opened">Ouverts récemment</string>
+    <string name="section_recent_modified">Modifiés ces 7 derniers jours</string>
+    <string name="action_remove_recent">Retirer de l\'historique</string>
+    <string name="action_clear_recents">Effacer l\'historique</string>
+    <string name="action_clear">Effacer</string>
+    <string name="confirm_clear_recents_title">Effacer l\'historique ?</string>
+    <string name="confirm_clear_recents_message">La liste des fichiers ouverts récemment sera vidée. Les fichiers eux-mêmes ne sont pas supprimés.</string>
+    <!-- %1$s : nom du fichier -->
+    <string name="recent_removed">%1$s retiré de l\'historique.</string>
+    <string name="recents_cleared">Historique effacé.</string>
+    <string name="section_folders">Dossiers</string>
+    <string name="section_files">Fichiers</string>
 </resources>

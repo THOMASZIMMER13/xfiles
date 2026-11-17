@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
 
-/** Réglages persistants : tri, fichiers cachés, dossiers favoris. */
+/** Réglages persistants : tri, fichiers cachés, favoris (dossiers et fichiers), fichiers ouverts récemment. */
 class PreferencesRepository(private val context: Context) {
 
     private object Keys {
@@ -22,7 +22,40 @@ class PreferencesRepository(private val context: Context) {
         val SHOW_HIDDEN = booleanPreferencesKey("show_hidden")
         /** Chemins séparés par des retours à la ligne, dans l'ordre d'ajout. */
         val FAVORITE_FOLDERS = stringPreferencesKey("favorite_folders")
+        /** Fichiers ouverts depuis XFiles : « chemin<TAB>date » par ligne, le plus récent d'abord. */
+        val RECENT_FILES = stringPreferencesKey("recent_files")
     }
+
+    /** Fichier ouvert récemment depuis XFiles. */
+    data class RecentEntry(val path: String, val openedAt: Long)
+
+    val recentFiles: Flow<List<RecentEntry>> = context.dataStore.data.map { prefs ->
+        parseRecents(prefs[Keys.RECENT_FILES])
+    }.distinctUntilChanged()
+
+    suspend fun recordOpened(path: String, now: Long = System.currentTimeMillis()) {
+        context.dataStore.edit { prefs ->
+            val list = listOf(RecentEntry(path, now)) + parseRecents(prefs[Keys.RECENT_FILES]).filter { it.path != path }
+            prefs[Keys.RECENT_FILES] = formatRecents(list.take(MAX_RECENTS))
+        }
+    }
+
+    suspend fun removeRecent(path: String) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.RECENT_FILES] = formatRecents(parseRecents(prefs[Keys.RECENT_FILES]).filter { it.path != path })
+        }
+    }
+
+    suspend fun clearRecents() {
+        context.dataStore.edit { it.remove(Keys.RECENT_FILES) }
+    }
+
+    private fun parseRecents(raw: String?): List<RecentEntry> = raw.orEmpty().split('\n').mapNotNull { line ->
+        val tab = line.lastIndexOf('\t')
+        if (tab <= 0) null else line.substring(tab + 1).toLongOrNull()?.let { RecentEntry(line.substring(0, tab), it) }
+    }
+
+    private fun formatRecents(list: List<RecentEntry>) = list.joinToString("\n") { "${it.path}\t${it.openedAt}" }
 
     val sortOptions: Flow<SortOptions> = context.dataStore.data.map { prefs ->
         SortOptions(
@@ -60,17 +93,21 @@ class PreferencesRepository(private val context: Context) {
         return nowFavorite
     }
 
-    /** Après un renommage : les favoris situés à [oldPath] ou en dessous suivent le nouveau chemin. */
+    /** Après un renommage ou un déplacement : favoris et récents situés à [oldPath] ou en dessous suivent. */
     suspend fun onPathRenamed(oldPath: String, newPath: String) {
+        fun follow(path: String) = when {
+            path == oldPath -> newPath
+            path.startsWith("$oldPath/") -> newPath + path.removePrefix(oldPath)
+            else -> path
+        }
         context.dataStore.edit { prefs ->
             val current = prefs[Keys.FAVORITE_FOLDERS].orEmpty().split('\n').filter { it.isNotEmpty() }
-            prefs[Keys.FAVORITE_FOLDERS] = current.joinToString("\n") { path ->
-                when {
-                    path == oldPath -> newPath
-                    path.startsWith("$oldPath/") -> newPath + path.removePrefix(oldPath)
-                    else -> path
-                }
-            }
+            prefs[Keys.FAVORITE_FOLDERS] = current.joinToString("\n") { follow(it) }
+            prefs[Keys.RECENT_FILES] = formatRecents(parseRecents(prefs[Keys.RECENT_FILES]).map { it.copy(path = follow(it.path)) })
         }
+    }
+
+    private companion object {
+        const val MAX_RECENTS = 50
     }
 }

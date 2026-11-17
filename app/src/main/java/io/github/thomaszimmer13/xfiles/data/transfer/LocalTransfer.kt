@@ -7,6 +7,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
+import java.io.IOException
+import java.io.InputStream
+import java.io.OutputStream
 import java.util.Locale
 
 enum class TransferMode { COPY, MOVE }
@@ -25,6 +28,35 @@ sealed interface TransferResult {
 data class ClipItem(val path: String, val name: String, val isDirectory: Boolean)
 
 data class ClipContent(val items: List<ClipItem>, val mode: TransferMode)
+
+/** Suivi d'un transfert : octets écrits, et demande d'annulation vérifiée à chaque bloc. */
+interface TransferListener {
+    fun onBytes(count: Long) {}
+    val isCancelled: Boolean get() = false
+
+    companion object {
+        val NONE = object : TransferListener {}
+    }
+}
+
+/** Levée quand l'utilisateur annule ; ce qui était en cours d'écriture a déjà été retiré. */
+class TransferCancelledException : IOException("Transfert annulé")
+
+/** Taille totale d'un fichier ou d'un dossier, contenu compris. */
+fun sizeOf(file: File): Long =
+    if (file.isDirectory) file.walkTopDown().filter { it.isFile }.sumOf { it.length() } else file.length()
+
+/** Copie un flux par blocs, en signalant la progression et en s'arrêtant si l'utilisateur annule. */
+fun copyStream(input: InputStream, output: OutputStream, listener: TransferListener) {
+    val buffer = ByteArray(256 * 1024)
+    while (true) {
+        if (listener.isCancelled) throw TransferCancelledException()
+        val read = input.read(buffer)
+        if (read < 0) break
+        output.write(buffer, 0, read)
+        listener.onBytes(read.toLong())
+    }
+}
 
 /**
  * Presse-papiers de fichiers de l'app (distinct du presse-papiers texte d'Android) :
@@ -70,7 +102,13 @@ class LocalTransfer {
      * Copie ou déplace [source] dans [targetDir].
      * @param choice réponse en cas de conflit de nom ; obligatoire si [conflicts] l'a signalé.
      */
-    fun transfer(source: String, targetDir: String, mode: TransferMode, choice: ConflictChoice?): TransferResult {
+    fun transfer(
+        source: String,
+        targetDir: String,
+        mode: TransferMode,
+        choice: ConflictChoice?,
+        listener: TransferListener = TransferListener.NONE,
+    ): TransferResult {
         val src = File(source)
         val dir = File(targetDir)
         if (!src.exists()) fail(Reason.NOT_FOUND, source)
@@ -100,27 +138,38 @@ class LocalTransfer {
         val target = File(dir, name)
 
         when (mode) {
-            TransferMode.COPY -> copy(src, target)
-            TransferMode.MOVE -> if (!src.renameTo(target)) {
+            TransferMode.COPY -> copy(src, target, listener)
+            TransferMode.MOVE -> if (src.renameTo(target)) {
+                listener.onBytes(sizeOf(target))
+            } else {
                 // Autre volume : copie puis suppression de l'original.
-                copy(src, target)
+                copy(src, target, listener)
                 if (!src.deleteRecursively()) fail(Reason.FAILED, source)
             }
         }
         return TransferResult.Done(target.path)
     }
 
-    private fun copy(src: File, target: File) {
-        val ok = try {
-            src.copyRecursively(target, overwrite = false)
-        } catch (_: Exception) {
-            false
-        }
-        if (!ok) {
+    private fun copy(src: File, target: File, listener: TransferListener) {
+        try {
+            copyTree(src, target, listener)
+        } catch (e: Exception) {
             // Pas de copie à moitié faite : on retire ce qui a déjà été écrit.
             target.deleteRecursively()
+            if (e is TransferCancelledException) throw e
             fail(Reason.FAILED, src.path)
         }
+    }
+
+    private fun copyTree(src: File, target: File, listener: TransferListener) {
+        if (src.isDirectory) {
+            if (!target.mkdir()) throw IOException("mkdir ${target.path}")
+            src.listFiles()?.forEach { child -> copyTree(child, File(target, child.name), listener) }
+        } else {
+            if (target.exists()) throw IOException("existe déjà ${target.path}")
+            src.inputStream().use { input -> target.outputStream().use { output -> copyStream(input, output, listener) } }
+        }
+        target.setLastModified(src.lastModified())
     }
 
     private fun fail(reason: Reason, what: String): Nothing =

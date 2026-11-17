@@ -27,7 +27,9 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.github.thomaszimmer13.xfiles.R
+import io.github.thomaszimmer13.xfiles.data.transfer.ConflictAnswer
 import io.github.thomaszimmer13.xfiles.data.transfer.ConflictChoice
+import io.github.thomaszimmer13.xfiles.data.transfer.ConflictPrompt
 
 /**
  * « Ce nom existe déjà » pendant un collage.

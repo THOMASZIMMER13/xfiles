@@ -18,12 +18,9 @@ import io.github.thomaszimmer13.xfiles.domain.SortOptions
 import io.github.thomaszimmer13.xfiles.ui.components.Announcer
 import io.github.thomaszimmer13.xfiles.data.transfer.ClipContent
 import io.github.thomaszimmer13.xfiles.data.transfer.ClipItem
-import io.github.thomaszimmer13.xfiles.data.transfer.ConflictChoice
 import io.github.thomaszimmer13.xfiles.data.transfer.TransferMode
-import io.github.thomaszimmer13.xfiles.data.transfer.TransferResult
+import io.github.thomaszimmer13.xfiles.data.transfer.TransferProgress
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,19 +45,9 @@ data class FolderUiState(
     val selected: Set<String> = emptySet(),
     /** Contenu du presse-papiers de fichiers (Copier / Déplacer), commun à tous les dossiers. */
     val clipboard: ClipContent? = null,
-    /** Collage en cours dans ce dossier. */
-    val pasting: Boolean = false,
-    /** Conflit de nom en attente de réponse pendant un collage. */
-    val conflict: ConflictPrompt? = null,
+    /** Opération longue en cours (dans n'importe quel dossier). */
+    val transfer: TransferProgress? = null,
 )
-
-/** Question posée quand un nom existe déjà : [othersRemaining] conflits suivent celui-ci. */
-data class ConflictPrompt(val name: String, val isDirectory: Boolean, val folder: String, val othersRemaining: Int)
-
-data class ConflictAnswer(val choice: ConflictChoice?, val applyToAll: Boolean) {
-    /** Annuler le collage (choix nul). */
-    val cancel: Boolean get() = choice == null
-}
 
 sealed interface FocusRequest {
     data class Item(val path: String) : FocusRequest
@@ -95,8 +82,7 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
     private val preferences = container.preferences
     private val trash = container.trash
     private val clipboard = container.clipboard
-    private val transfer = container.transfer
-    private var pendingConflict: CompletableDeferred<ConflictAnswer>? = null
+    private val transfers = container.transfers
 
     private val _state = MutableStateFlow(FolderUiState())
     val state: StateFlow<FolderUiState> = _state.asStateFlow()
@@ -121,6 +107,19 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
             clipboard.content.collect { clip -> _state.update { it.copy(clipboard = clip) } }
         }
         viewModelScope.launch {
+            transfers.progress.collect { p -> _state.update { it.copy(transfer = p) } }
+        }
+        viewModelScope.launch {
+            // Fin d'une opération : le dossier affiché a pu changer ; focus sur l'élément créé s'il est ici.
+            transfers.outcomes.collect { outcome ->
+                val path = _state.value.path ?: return@collect
+                runCatching { refreshQuietly(path) }
+                if (outcome.targetDir == path && outcome.focusPath != null) {
+                    _state.update { it.copy(focusRequest = FocusRequest.Item(outcome.focusPath)) }
+                }
+            }
+        }
+        viewModelScope.launch {
             preferences.favoriteFolders.collect { paths -> _state.update { it.copy(favorites = paths.toSet()) } }
         }
     }
@@ -134,8 +133,7 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
                 favorites = it.favorites,
                 sort = it.sort,
                 clipboard = it.clipboard,
-                // Un collage lancé ailleurs peut encore attendre une réponse.
-                conflict = it.conflict,
+                transfer = it.transfer,
             )
         }
         reload(path)
@@ -241,104 +239,32 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
         announcer.announce(getApplication<Application>().getString(R.string.clipboard_cleared))
     }
 
-    fun answerConflict(answer: ConflictAnswer) {
-        _state.update { it.copy(conflict = null) }
-        pendingConflict?.complete(answer)
-        pendingConflict = null
-    }
-
-    private suspend fun askConflict(prompt: ConflictPrompt): ConflictAnswer {
-        val deferred = CompletableDeferred<ConflictAnswer>()
-        pendingConflict = deferred
-        _state.update { it.copy(conflict = prompt) }
-        return deferred.await()
-    }
-
-    /** Colle le presse-papiers dans le dossier affiché, en demandant quoi faire à chaque conflit de nom. */
+    /** Colle le presse-papiers ici ; l'opération continue même si l'on quitte le dossier ou l'app. */
     fun paste() {
         val clip = clipboard.content.value ?: return
         val dir = _state.value.path ?: return
-        if (_state.value.pasting) return
-        val folderName = _state.value.crumbs.lastOrNull()?.name.orEmpty()
-        val mode = clip.mode
-        viewModelScope.launch {
-            val app = getApplication<Application>()
-            val res = app.resources
-            _state.update { it.copy(pasting = true) }
-            // Annonce de début seulement si l'opération dure : pas de bavardage pour un petit fichier.
-            val slowNotice = launch {
-                delay(1500)
-                announcer.announce(app.getString(if (mode == TransferMode.COPY) R.string.paste_in_progress_copy else R.string.paste_in_progress_move))
-            }
+        startOrBusy { transfers.paste(clip, dir, folderName()) }
+    }
 
-            val conflicts = withContext(Dispatchers.IO) { transfer.conflicts(clip.items.map { it.path }, dir) }
-            var remainingConflicts = conflicts.size
-            var applyAll: ConflictChoice? = null
-            var cancelled = false
-            val done = mutableListOf<String>()
-            var skipped = 0
-            var alreadyHere = 0
-            val failures = mutableListOf<FileOperationException.Reason>()
+    /** Extrait toute l'archive dans le dossier affiché (« Photos.zip » → dossier « Photos »). */
+    fun extractHere(item: FileItem) {
+        val dir = _state.value.path ?: return
+        startOrBusy { transfers.extract(item.path, null, dir, folderName()) }
+    }
 
-            for (item in clip.items) {
-                var choice: ConflictChoice? = null
-                if (item.path in conflicts) {
-                    remainingConflicts--
-                    choice = applyAll ?: run {
-                        val answer = askConflict(ConflictPrompt(item.name, item.isDirectory, folderName, remainingConflicts))
-                        if (answer.cancel) {
-                            cancelled = true
-                            null
-                        } else {
-                            if (answer.applyToAll) applyAll = answer.choice
-                            answer.choice
-                        }
-                    }
-                    if (cancelled) break
-                }
-                try {
-                    when (val result = withContext(Dispatchers.IO) { transfer.transfer(item.path, dir, mode, choice) }) {
-                        is TransferResult.Done -> {
-                            done += result.path
-                            if (mode == TransferMode.MOVE && item.isDirectory) preferences.onPathRenamed(item.path, result.path)
-                        }
-                        TransferResult.Skipped -> skipped++
-                        TransferResult.AlreadyHere -> alreadyHere++
-                    }
-                } catch (e: FileOperationException) {
-                    failures += e.reason
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Exception) {
-                    failures += FileOperationException.Reason.FAILED
-                }
-            }
-            slowNotice.cancel()
+    fun compress(items: List<FileItem>) {
+        val dir = _state.value.path ?: return
+        if (items.isEmpty()) return
+        _state.update { it.copy(selecting = false, selected = emptySet()) }
+        startOrBusy { transfers.compress(items.map { it.path }, dir, folderName()) }
+    }
 
-            // Après un déplacement, les éléments ne sont plus à leur ancienne place : presse-papiers vidé.
-            if (mode == TransferMode.MOVE && !cancelled) clipboard.clear()
-            if (_state.value.path == dir) {
-                runCatching { refreshQuietly(dir) }
-                _state.update { it.copy(focusRequest = done.firstOrNull()?.let { p -> FocusRequest.Item(p) } ?: it.focusRequest) }
-            }
-            _state.update { it.copy(pasting = false) }
+    fun compressSelection() = compress(selectedItems())
 
-            val message = buildList {
-                if (cancelled) add(app.getString(R.string.paste_cancelled))
-                if (done.isNotEmpty()) {
-                    val plural = if (mode == TransferMode.COPY) R.plurals.pasted_copy else R.plurals.pasted_move
-                    add(res.getQuantityString(plural, done.size, done.size, java.io.File(done.first()).name, folderName))
-                }
-                if (skipped > 0) add(res.getQuantityString(R.plurals.paste_skipped, skipped, skipped))
-                if (alreadyHere > 0) add(res.getQuantityString(R.plurals.paste_already_here, alreadyHere, alreadyHere))
-                if (failures.size == 1 && clip.items.size == 1) {
-                    add(app.getString(failures.first().message(), clip.items.first().name))
-                } else if (failures.isNotEmpty()) {
-                    add(res.getQuantityString(R.plurals.op_failures, failures.size, failures.size))
-                }
-            }.joinToString(" ")
-            announcer.announce(message)
-        }
+    private fun folderName() = _state.value.crumbs.lastOrNull()?.name.orEmpty()
+
+    private fun startOrBusy(start: () -> Boolean) {
+        if (!start()) announcer.announce(getApplication<Application>().getString(R.string.transfer_busy))
     }
 
     fun deleteSelectionForever() = runOnSelection(R.plurals.deleted_forever_many) { fileSource.delete(it.path) }
@@ -512,6 +438,8 @@ internal fun FileOperationException.Reason.message(): Int = when (this) {
     FileOperationException.Reason.DENIED -> R.string.op_denied
     FileOperationException.Reason.FAILED -> R.string.op_failed
     FileOperationException.Reason.INTO_ITSELF -> R.string.op_into_itself
+    FileOperationException.Reason.ENCRYPTED -> R.string.op_encrypted
+    FileOperationException.Reason.BAD_ARCHIVE -> R.string.op_bad_archive
 }
 
 /** Libellé d'un critère de tri. */

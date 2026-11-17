@@ -55,19 +55,23 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.thomaszimmer13.xfiles.R
 import io.github.thomaszimmer13.xfiles.a11y.FileDescriptions
+import io.github.thomaszimmer13.xfiles.data.archive.isZip
 import io.github.thomaszimmer13.xfiles.data.open.FileOpener
 import io.github.thomaszimmer13.xfiles.data.source.FileItem
 import io.github.thomaszimmer13.xfiles.data.transfer.ClipContent
 import io.github.thomaszimmer13.xfiles.data.transfer.TransferMode
 import io.github.thomaszimmer13.xfiles.domain.Crumb
+import io.github.thomaszimmer13.xfiles.ui.browser.Routes
 import io.github.thomaszimmer13.xfiles.ui.components.FocusOnceEffect
+import io.github.thomaszimmer13.xfiles.ui.components.rememberFileLauncher
+import io.github.thomaszimmer13.xfiles.ui.components.rememberNotificationPermission
 import io.github.thomaszimmer13.xfiles.ui.components.StatusMessage
 import io.github.thomaszimmer13.xfiles.ui.components.XFilesTopBar
 
 /**
  * Contenu d'un dossier.
- * Ordre de balayage : Retour → titre (« Factures, 12 éléments ») → Nouveau dossier → Sélectionner
- * → Trier et afficher → fil d'Ariane → fichiers → message d'état.
+ * Ordre de balayage : Retour → titre (« Factures, 12 éléments ») → Nouveau dossier → Rechercher
+ * → Sélectionner → Trier et afficher → fil d'Ariane → (presse-papiers) → fichiers → message d'état.
  *
  * En mode sélection : Terminer la sélection → titre (« Sélection : 3 éléments sélectionnés, sur 12 éléments »)
  * → Tout sélectionner → fil d'Ariane → fichiers (cases à cocher) → Partager, Mettre à la corbeille → message.
@@ -79,7 +83,7 @@ import io.github.thomaszimmer13.xfiles.ui.components.XFilesTopBar
 fun FolderScreen(
     path: String,
     focusPath: String?,
-    onOpenFolder: (String) -> Unit,
+    onOpen: (String) -> Unit,
     onBack: () -> Unit,
     onJump: (String?) -> Unit,
     viewModel: FolderViewModel = viewModel(),
@@ -98,29 +102,19 @@ fun FolderScreen(
     var confirmSelectionTrash by rememberSaveable { mutableStateOf(false) }
 
     val context = LocalContext.current
-    val openWithTitle = stringResource(R.string.chooser_open_with)
-    val shareTitle = stringResource(R.string.chooser_share)
-    val noAppMessage = stringResource(R.string.open_no_app)
-    val failedMessage = stringResource(R.string.open_failed)
+    val launcher = rememberFileLauncher(onRoute = onOpen, onProblem = { viewModel.announcer.announce(it) })
+    // Opérations longues : autorisation des notifications demandée juste avant, pour voir la progression.
+    val withNotifications = rememberNotificationPermission()
     val pathCopiedMessage = stringResource(R.string.path_copied)
     val pathLabel = stringResource(R.string.details_path)
     val foldersNotSharedMessage = stringResource(R.string.selection_share_folders)
 
-    /** Annonce le résultat d'une transmission à une autre app, s'il y a un problème. */
-    fun report(result: FileOpener.Result) {
-        when (result) {
-            FileOpener.Result.OK -> Unit
-            FileOpener.Result.NO_APP -> viewModel.announcer.announce(noAppMessage)
-            FileOpener.Result.FAILED -> viewModel.announcer.announce(failedMessage)
-        }
-    }
-
     val actions = FileRowActions(
-        open = { item ->
-            if (item.isDirectory) onOpenFolder(item.path) else report(FileOpener.open(context, item.path, item.name))
-        },
-        openWith = { item -> report(FileOpener.open(context, item.path, item.name, chooserTitle = openWithTitle)) },
-        share = { item -> report(FileOpener.share(context, item.path, item.name, shareTitle)) },
+        open = { item -> launcher.open(item.path, item.name, item.isDirectory) },
+        openWith = { item -> launcher.openWith(item.path, item.name) },
+        share = { item -> launcher.share(item.path, item.name) },
+        extract = { item -> withNotifications { viewModel.extractHere(item) } },
+        compress = { item -> withNotifications { viewModel.compress(listOf(item)) } },
         rename = { item -> renamePath = item.path },
         toggleFavorite = viewModel::toggleFavorite,
         details = { item -> detailsPath = item.path },
@@ -216,6 +210,9 @@ fun FolderScreen(
                     IconButton(onClick = { showNewFolderDialog = true }) {
                         Icon(painterResource(R.drawable.ic_new_folder), contentDescription = stringResource(R.string.new_folder_title))
                     }
+                    IconButton(onClick = { onOpen(Routes.search(path)) }) {
+                        Icon(painterResource(R.drawable.ic_search), contentDescription = stringResource(R.string.action_search))
+                    }
                     if (loaded && state.items.isNotEmpty()) {
                         IconButton(onClick = { viewModel.startSelection() }) {
                             Icon(painterResource(R.drawable.ic_select), contentDescription = stringResource(R.string.action_select))
@@ -232,8 +229,8 @@ fun FolderScreen(
         if (clip != null && !state.selecting && loaded && !state.error) {
             ClipboardBanner(
                 clip = clip,
-                pasting = state.pasting,
-                onPaste = viewModel::paste,
+                busy = state.transfer != null,
+                onPaste = { withNotifications { viewModel.paste() } },
                 onClear = viewModel::clearClipboard,
             )
         }
@@ -262,12 +259,13 @@ fun FolderScreen(
                 enabled = state.selected.isNotEmpty(),
                 onCopy = { viewModel.putSelectionInClipboard(TransferMode.COPY) },
                 onMove = { viewModel.putSelectionInClipboard(TransferMode.MOVE) },
+                onCompress = { withNotifications { viewModel.compressSelection() } },
                 onShare = {
                     val items = viewModel.selectedItems()
                     if (items.any { it.isDirectory }) {
                         viewModel.announcer.announce(foldersNotSharedMessage)
                     } else {
-                        report(FileOpener.shareMany(context, items.map { it.path to it.name }, shareTitle))
+                        launcher.shareMany(items.map { it.path to it.name })
                     }
                 },
                 onTrash = { confirmSelectionTrash = true },
@@ -275,8 +273,6 @@ fun FolderScreen(
         }
         StatusMessage(announcement)
     }
-
-    state.conflict?.let { prompt -> ConflictDialog(prompt, onAnswer = viewModel::answerConflict) }
 
     if (confirmSelectionTrash && state.selected.isNotEmpty()) {
         val count = state.selected.size
@@ -381,18 +377,22 @@ private class FileRowActions(
     val moveToTrash: (FileItem) -> Unit,
     val copy: (FileItem) -> Unit,
     val move: (FileItem) -> Unit,
+    /** Archive zip : extraire ici. */
+    val extract: (FileItem) -> Unit,
+    val compress: (FileItem) -> Unit,
     /** Entre en mode sélection en cochant cet élément. */
     val select: (FileItem) -> Unit,
     /** Coche ou décoche (mode sélection). */
     val toggle: (FileItem) -> Unit,
 )
 
-/** Actions sur la sélection, en bas de l'écran (lues après la liste) : Copier, Déplacer, Partager, Corbeille. */
+/** Actions sur la sélection, en bas de l'écran (lues après la liste) : Copier, Déplacer, Partager, Compresser, Corbeille. */
 @Composable
 private fun SelectionBar(
     enabled: Boolean,
     onCopy: () -> Unit,
     onMove: () -> Unit,
+    onCompress: () -> Unit,
     onShare: () -> Unit,
     onTrash: () -> Unit,
 ) {
@@ -402,6 +402,7 @@ private fun SelectionBar(
             ToolButton(R.drawable.ic_copy, stringResource(R.string.action_copy), enabled, onCopy)
             ToolButton(R.drawable.ic_move, stringResource(R.string.action_move), enabled, onMove)
             ToolButton(R.drawable.ic_share, stringResource(R.string.action_share), enabled, onShare)
+            ToolButton(R.drawable.ic_archive, stringResource(R.string.action_compress), enabled, onCompress)
             ToolButton(R.drawable.ic_delete, stringResource(R.string.action_trash_short), enabled, onTrash)
         }
     }
@@ -420,7 +421,7 @@ private fun androidx.compose.foundation.layout.RowScope.ToolButton(icon: Int, la
             .padding(vertical = 6.dp),
     ) {
         Icon(painterResource(icon), contentDescription = null, tint = color)
-        Text(label, style = MaterialTheme.typography.labelMedium, color = color, maxLines = 1)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = color, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -429,19 +430,15 @@ private fun androidx.compose.foundation.layout.RowScope.ToolButton(icon: Int, la
  * et « Vider le presse-papiers ». Placé juste après le fil d'Ariane pour être trouvé sans parcourir la liste.
  */
 @Composable
-private fun ClipboardBanner(clip: ClipContent, pasting: Boolean, onPaste: () -> Unit, onClear: () -> Unit) {
+private fun ClipboardBanner(clip: ClipContent, busy: Boolean, onPaste: () -> Unit, onClear: () -> Unit) {
     val count = clip.items.size
     val copy = clip.mode == TransferMode.COPY
-    val text = if (pasting) {
-        stringResource(if (copy) R.string.paste_in_progress_copy else R.string.paste_in_progress_move)
-    } else {
-        pluralStringResource(
-            if (copy) R.plurals.clipboard_banner_copy else R.plurals.clipboard_banner_move,
-            count,
-            count,
-            clip.items.first().name,
-        )
-    }
+    val text = pluralStringResource(
+        if (copy) R.plurals.clipboard_banner_copy else R.plurals.clipboard_banner_move,
+        count,
+        count,
+        clip.items.first().name,
+    )
     Column(Modifier.background(MaterialTheme.colorScheme.secondaryContainer)) {
         Text(
             text,
@@ -451,12 +448,13 @@ private fun ClipboardBanner(clip: ClipContent, pasting: Boolean, onPaste: () -> 
             modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
         )
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-            TextButton(onClick = onPaste, enabled = !pasting) {
+            // Pendant une autre opération, le bouton reste actif : il annonce qu'il faut attendre.
+            TextButton(onClick = onPaste) {
                 Icon(painterResource(R.drawable.ic_paste), contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text(stringResource(if (copy) R.string.action_paste_here else R.string.action_move_here))
             }
-            TextButton(onClick = onClear, enabled = !pasting) {
+            TextButton(onClick = onClear, enabled = !busy) {
                 Text(stringResource(R.string.action_clear_clipboard))
             }
         }
@@ -497,7 +495,8 @@ private fun Breadcrumb(crumbs: List<Crumb>, onJump: (String?) -> Unit) {
 /**
  * Une ligne = un seul élément TalkBack : nom, type, taille, date.
  * Appui double : ouvrir. Les autres actions sont des actions personnalisées TalkBack,
- * dans l'ordre : ouvrir avec, partager, renommer, copier, déplacer, favori, sélectionner, détails,
+ * dans l'ordre : ouvrir avec, partager, renommer, copier, déplacer, (extraire ici), compresser, favori,
+ * sélectionner, détails,
  * et en dernier, comme sur iOS, mettre à la corbeille (moins de risque de le déclencher par erreur).
  *
  * En mode sélection, la ligne devient une case à cocher : « …, case à cocher, cochée » ;
@@ -522,6 +521,8 @@ private fun FileRow(
     val trashLabel = stringResource(R.string.action_move_to_trash)
     val selectLabel = stringResource(R.string.action_select)
     val copyLabel = stringResource(R.string.action_copy)
+    val extractLabel = stringResource(R.string.action_extract_here)
+    val compressLabel = stringResource(R.string.action_compress)
     val moveLabel = stringResource(R.string.action_move)
     val checkLabel = stringResource(if (selected) R.string.toggle_unselect else R.string.toggle_select)
 
@@ -550,10 +551,11 @@ private fun FileRow(
                         add(CustomAccessibilityAction(renameLabel) { actions.rename(item); true })
                         add(CustomAccessibilityAction(copyLabel) { actions.copy(item); true })
                         add(CustomAccessibilityAction(moveLabel) { actions.move(item); true })
-                        if (item.isDirectory) {
-                            // Les favoris concernent les dossiers ; les fichiers favoris viendront avec l'onglet Favoris.
-                            add(CustomAccessibilityAction(favoriteLabel) { actions.toggleFavorite(item); true })
+                        if (!item.isDirectory && isZip(item.name)) {
+                            add(CustomAccessibilityAction(extractLabel) { actions.extract(item); true })
                         }
+                        add(CustomAccessibilityAction(compressLabel) { actions.compress(item); true })
+                        add(CustomAccessibilityAction(favoriteLabel) { actions.toggleFavorite(item); true })
                         add(CustomAccessibilityAction(selectLabel) { actions.select(item); true })
                         add(CustomAccessibilityAction(detailsLabel) { actions.details(item); true })
                         add(CustomAccessibilityAction(trashLabel) { actions.moveToTrash(item); true })
@@ -568,6 +570,7 @@ private fun FileRow(
             } else Icon(
                 painter = painterResource(
                     when {
+                        !item.isDirectory && isZip(item.name) -> R.drawable.ic_archive
                         !item.isDirectory -> R.drawable.ic_file
                         isFavorite -> R.drawable.ic_favorite
                         else -> R.drawable.ic_tab_explorer

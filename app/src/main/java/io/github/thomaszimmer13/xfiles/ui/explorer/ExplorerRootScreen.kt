@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -44,6 +45,7 @@ import io.github.thomaszimmer13.xfiles.a11y.FileDescriptions
 import io.github.thomaszimmer13.xfiles.a11y.SizeFormatter
 import io.github.thomaszimmer13.xfiles.data.volumes.LocationKind
 import io.github.thomaszimmer13.xfiles.data.volumes.StorageLocation
+import io.github.thomaszimmer13.xfiles.ui.browser.Routes
 import io.github.thomaszimmer13.xfiles.ui.components.FocusOnceEffect
 import io.github.thomaszimmer13.xfiles.ui.components.SectionHeader
 import io.github.thomaszimmer13.xfiles.ui.components.StatusMessage
@@ -92,7 +94,14 @@ fun ExplorerRootScreen(
     }
 
     Column(Modifier.fillMaxSize()) {
-        XFilesTopBar(title = stringResource(R.string.tab_explorer))
+        XFilesTopBar(
+            title = stringResource(R.string.tab_explorer),
+            actions = {
+                IconButton(onClick = { onOpen(Routes.search(null)) }) {
+                    Icon(painterResource(R.drawable.ic_search), contentDescription = stringResource(R.string.search_everywhere))
+                }
+            },
+        )
         LazyColumn(
             state = listState,
             modifier = Modifier

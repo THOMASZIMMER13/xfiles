@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -18,7 +17,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -27,14 +25,16 @@ import androidx.compose.ui.semantics.CollectionItemInfo
 import androidx.compose.ui.semantics.collectionInfo
 import androidx.compose.ui.semantics.collectionItemInfo
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import io.github.thomaszimmer13.xfiles.R
 import io.github.thomaszimmer13.xfiles.data.permission.StorageAccess
 import io.github.thomaszimmer13.xfiles.ui.components.XFilesTopBar
+import io.github.thomaszimmer13.xfiles.ui.browser.BrowserStack
 import io.github.thomaszimmer13.xfiles.ui.explorer.ExplorerScreen
+import io.github.thomaszimmer13.xfiles.ui.favorites.FavoritesScreen
+import io.github.thomaszimmer13.xfiles.ui.recents.RecentsScreen
+import io.github.thomaszimmer13.xfiles.ui.transfer.TransferPanel
 import io.github.thomaszimmer13.xfiles.ui.permission.PermissionScreen
 
 /**
@@ -68,11 +68,16 @@ private fun MainTabs() {
     val tabs = AppTab.entries
     // Chaque onglet garde son état (dossier ouvert, défilement) quand on passe à un autre, comme sur iOS.
     val tabStates = rememberSaveableStateHolder()
-    // Toucher l'onglet Explorer alors qu'il est déjà actif ramène à sa racine, comme sur iOS.
+    // Toucher l'onglet déjà actif ramène à sa racine, comme sur iOS.
+    var recentsReset by rememberSaveable { mutableIntStateOf(0) }
+    var favoritesReset by rememberSaveable { mutableIntStateOf(0) }
     var explorerReset by rememberSaveable { mutableIntStateOf(0) }
 
     Scaffold(
         bottomBar = {
+          Column {
+            // Opération en cours, annonces et conflits : visibles depuis n'importe quel onglet.
+            TransferPanel()
             // collectionInfo : permet à TalkBack d'annoncer la position (« 1 sur 3 »).
             NavigationBar(
                 modifier = Modifier.semantics {
@@ -84,7 +89,11 @@ private fun MainTabs() {
                         selected = tab == currentTab,
                         onClick = {
                             if (tab == currentTab) {
-                                if (tab == AppTab.EXPLORER) explorerReset++
+                                when (tab) {
+                                    AppTab.RECENTS -> recentsReset++
+                                    AppTab.FAVORITES -> favoritesReset++
+                                    AppTab.EXPLORER -> explorerReset++
+                                }
                             } else {
                                 currentTab = tab
                             }
@@ -103,6 +112,7 @@ private fun MainTabs() {
                     )
                 }
             }
+          }
         },
     ) { innerPadding ->
         // Pas de paneTitle ici : TalkBack annonçait le titre en double avec l'onglet sélectionné.
@@ -113,31 +123,15 @@ private fun MainTabs() {
         ) {
             tabStates.SaveableStateProvider(currentTab.name) {
                 when (currentTab) {
-                    AppTab.RECENTS -> PlaceholderTab(R.string.tab_recents, R.string.empty_recents)
-                    AppTab.FAVORITES -> PlaceholderTab(R.string.tab_favorites, R.string.empty_favorites)
+                    AppTab.RECENTS -> BrowserStack(recentsReset) { open, reveal, focusPath ->
+                        RecentsScreen(onOpen = open, onReveal = reveal, focusPath = focusPath)
+                    }
+                    AppTab.FAVORITES -> BrowserStack(favoritesReset) { open, reveal, focusPath ->
+                        FavoritesScreen(onOpen = open, onReveal = reveal, focusPath = focusPath)
+                    }
                     AppTab.EXPLORER -> ExplorerScreen(resetSignal = explorerReset)
                 }
             }
-        }
-    }
-}
-
-/** Contenu provisoire d'un onglet : sa barre de titre et un simple message lisible. */
-@Composable
-private fun PlaceholderTab(title: Int, message: Int) {
-    Column(Modifier.fillMaxSize()) {
-        XFilesTopBar(title = stringResource(title))
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = stringResource(message),
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Center,
-            )
         }
     }
 }

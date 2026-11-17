@@ -44,5 +44,11 @@ class FileOperationException(val reason: Reason, message: String) : IOException(
 
         /** Un dossier ne peut pas être copié ou déplacé dans lui-même ou l'un de ses sous-dossiers. */
         INTO_ITSELF,
+
+        /** Archive protégée par mot de passe (non prise en charge). */
+        ENCRYPTED,
+
+        /** Archive illisible ou abîmée. */
+        BAD_ARCHIVE,
     }
 }
