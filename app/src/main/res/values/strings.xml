@@ -203,4 +203,72 @@
         <item quantity="many">%1$d éléments n\'ont pas pu être traités.</item>
         <item quantity="other">%1$d éléments n\'ont pas pu être traités.</item>
     </plurals>
+
+    <!-- Copier, déplacer, coller -->
+    <string name="action_copy">Copier</string>
+    <string name="action_move">Déplacer</string>
+    <string name="action_trash_short">Corbeille</string>
+    <string name="action_paste_here">Coller ici</string>
+    <string name="action_move_here">Déplacer ici</string>
+    <string name="action_clear_clipboard">Vider le presse-papiers</string>
+    <string name="clipboard_cleared">Presse-papiers vidé.</string>
+    <!-- %1$d : nombre, %2$s : nom (quand il n'y a qu'un élément) -->
+    <plurals name="clipboard_copy_ready">
+        <item quantity="one">%2$s prêt à être copié. Ouvrez le dossier de destination, puis Coller ici.</item>
+        <item quantity="many">%1$d éléments prêts à être copiés. Ouvrez le dossier de destination, puis Coller ici.</item>
+        <item quantity="other">%1$d éléments prêts à être copiés. Ouvrez le dossier de destination, puis Coller ici.</item>
+    </plurals>
+    <plurals name="clipboard_move_ready">
+        <item quantity="one">%2$s prêt à être déplacé. Ouvrez le dossier de destination, puis Déplacer ici.</item>
+        <item quantity="many">%1$d éléments prêts à être déplacés. Ouvrez le dossier de destination, puis Déplacer ici.</item>
+        <item quantity="other">%1$d éléments prêts à être déplacés. Ouvrez le dossier de destination, puis Déplacer ici.</item>
+    </plurals>
+    <plurals name="clipboard_banner_copy">
+        <item quantity="one">Presse-papiers : %2$s, à copier</item>
+        <item quantity="many">Presse-papiers : %1$d éléments à copier</item>
+        <item quantity="other">Presse-papiers : %1$d éléments à copier</item>
+    </plurals>
+    <plurals name="clipboard_banner_move">
+        <item quantity="one">Presse-papiers : %2$s, à déplacer</item>
+        <item quantity="many">Presse-papiers : %1$d éléments à déplacer</item>
+        <item quantity="other">Presse-papiers : %1$d éléments à déplacer</item>
+    </plurals>
+    <string name="paste_in_progress_copy">Copie en cours…</string>
+    <string name="paste_in_progress_move">Déplacement en cours…</string>
+    <string name="paste_cancelled">Collage annulé.</string>
+    <!-- %1$d : nombre, %2$s : nom (un seul élément), %3$s : dossier de destination -->
+    <plurals name="pasted_copy">
+        <item quantity="one">%2$s copié dans %3$s.</item>
+        <item quantity="many">%1$d éléments copiés dans %3$s.</item>
+        <item quantity="other">%1$d éléments copiés dans %3$s.</item>
+    </plurals>
+    <plurals name="pasted_move">
+        <item quantity="one">%2$s déplacé dans %3$s.</item>
+        <item quantity="many">%1$d éléments déplacés dans %3$s.</item>
+        <item quantity="other">%1$d éléments déplacés dans %3$s.</item>
+    </plurals>
+    <plurals name="paste_skipped">
+        <item quantity="one">%1$d élément ignoré.</item>
+        <item quantity="many">%1$d éléments ignorés.</item>
+        <item quantity="other">%1$d éléments ignorés.</item>
+    </plurals>
+    <plurals name="paste_already_here">
+        <item quantity="one">%1$d élément était déjà dans ce dossier.</item>
+        <item quantity="many">%1$d éléments étaient déjà dans ce dossier.</item>
+        <item quantity="other">%1$d éléments étaient déjà dans ce dossier.</item>
+    </plurals>
+    <string name="op_into_itself">%1$s ne peut pas être placé dans lui-même ni dans l\'un de ses sous-dossiers.</string>
+    <!-- Conflit de nom -->
+    <string name="conflict_title">Ce nom existe déjà</string>
+    <!-- %1$s : nom, %2$s : dossier de destination -->
+    <string name="conflict_message">%1$s existe déjà dans %2$s.</string>
+    <string name="conflict_replace">Remplacer</string>
+    <string name="conflict_keep_both">Garder les deux</string>
+    <string name="conflict_skip">Ignorer</string>
+    <string name="action_cancel_paste">Annuler le collage</string>
+    <plurals name="conflict_apply_all">
+        <item quantity="one">Appliquer aussi à l\'autre conflit</item>
+        <item quantity="many">Appliquer aussi aux %1$d autres conflits</item>
+        <item quantity="other">Appliquer aussi aux %1$d autres conflits</item>
+    </plurals>
 </resources>

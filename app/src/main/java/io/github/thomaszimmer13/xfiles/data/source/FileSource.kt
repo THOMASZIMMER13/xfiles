@@ -39,5 +39,10 @@ class FolderNotReadableException(path: String) : IOException("Dossier illisible 
 
 /** Échec d'une opération, avec une raison que l'interface sait annoncer. */
 class FileOperationException(val reason: Reason, message: String) : IOException(message) {
-    enum class Reason { ALREADY_EXISTS, NOT_FOUND, DENIED, FAILED }
+    enum class Reason {
+        ALREADY_EXISTS, NOT_FOUND, DENIED, FAILED,
+
+        /** Un dossier ne peut pas être copié ou déplacé dans lui-même ou l'un de ses sous-dossiers. */
+        INTO_ITSELF,
+    }
 }

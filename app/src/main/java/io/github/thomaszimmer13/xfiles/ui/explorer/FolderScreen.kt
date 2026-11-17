@@ -57,6 +57,8 @@ import io.github.thomaszimmer13.xfiles.R
 import io.github.thomaszimmer13.xfiles.a11y.FileDescriptions
 import io.github.thomaszimmer13.xfiles.data.open.FileOpener
 import io.github.thomaszimmer13.xfiles.data.source.FileItem
+import io.github.thomaszimmer13.xfiles.data.transfer.ClipContent
+import io.github.thomaszimmer13.xfiles.data.transfer.TransferMode
 import io.github.thomaszimmer13.xfiles.domain.Crumb
 import io.github.thomaszimmer13.xfiles.ui.components.FocusOnceEffect
 import io.github.thomaszimmer13.xfiles.ui.components.StatusMessage
@@ -123,6 +125,8 @@ fun FolderScreen(
         toggleFavorite = viewModel::toggleFavorite,
         details = { item -> detailsPath = item.path },
         moveToTrash = { item -> trashPath = item.path },
+        copy = { item -> viewModel.putInClipboard(listOf(item), TransferMode.COPY) },
+        move = { item -> viewModel.putInClipboard(listOf(item), TransferMode.MOVE) },
         select = { item -> viewModel.startSelection(item) },
         toggle = viewModel::toggleSelection,
     )
@@ -224,6 +228,15 @@ fun FolderScreen(
             )
         }
         if (ready) Breadcrumb(state.crumbs, onJump)
+        val clip = state.clipboard
+        if (clip != null && !state.selecting && loaded && !state.error) {
+            ClipboardBanner(
+                clip = clip,
+                pasting = state.pasting,
+                onPaste = viewModel::paste,
+                onClear = viewModel::clearClipboard,
+            )
+        }
 
         Box(Modifier.weight(1f)) {
             when {
@@ -247,6 +260,8 @@ fun FolderScreen(
         if (state.selecting) {
             SelectionBar(
                 enabled = state.selected.isNotEmpty(),
+                onCopy = { viewModel.putSelectionInClipboard(TransferMode.COPY) },
+                onMove = { viewModel.putSelectionInClipboard(TransferMode.MOVE) },
                 onShare = {
                     val items = viewModel.selectedItems()
                     if (items.any { it.isDirectory }) {
@@ -260,6 +275,8 @@ fun FolderScreen(
         }
         StatusMessage(announcement)
     }
+
+    state.conflict?.let { prompt -> ConflictDialog(prompt, onAnswer = viewModel::answerConflict) }
 
     if (confirmSelectionTrash && state.selected.isNotEmpty()) {
         val count = state.selected.size
@@ -362,30 +379,85 @@ private class FileRowActions(
     val toggleFavorite: (FileItem) -> Unit,
     val details: (FileItem) -> Unit,
     val moveToTrash: (FileItem) -> Unit,
+    val copy: (FileItem) -> Unit,
+    val move: (FileItem) -> Unit,
     /** Entre en mode sélection en cochant cet élément. */
     val select: (FileItem) -> Unit,
     /** Coche ou décoche (mode sélection). */
     val toggle: (FileItem) -> Unit,
 )
 
-/** Actions sur la sélection, en bas de l'écran (lues après la liste). */
+/** Actions sur la sélection, en bas de l'écran (lues après la liste) : Copier, Déplacer, Partager, Corbeille. */
 @Composable
-private fun SelectionBar(enabled: Boolean, onShare: () -> Unit, onTrash: () -> Unit) {
+private fun SelectionBar(
+    enabled: Boolean,
+    onCopy: () -> Unit,
+    onMove: () -> Unit,
+    onShare: () -> Unit,
+    onTrash: () -> Unit,
+) {
     Column {
         HorizontalDivider()
-        Row(
-            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceEvenly,
-            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-        ) {
-            TextButton(onClick = onShare, enabled = enabled) {
-                Icon(painterResource(R.drawable.ic_share), contentDescription = null)
+        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            ToolButton(R.drawable.ic_copy, stringResource(R.string.action_copy), enabled, onCopy)
+            ToolButton(R.drawable.ic_move, stringResource(R.string.action_move), enabled, onMove)
+            ToolButton(R.drawable.ic_share, stringResource(R.string.action_share), enabled, onShare)
+            ToolButton(R.drawable.ic_delete, stringResource(R.string.action_trash_short), enabled, onTrash)
+        }
+    }
+}
+
+/** Bouton de barre d'outils : icône et libellé court dessous ; un seul élément TalkBack (« Copier, bouton »). */
+@Composable
+private fun androidx.compose.foundation.layout.RowScope.ToolButton(icon: Int, label: String, enabled: Boolean, onClick: () -> Unit) {
+    val color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .weight(1f)
+            .heightIn(min = 56.dp)
+            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
+            .padding(vertical = 6.dp),
+    ) {
+        Icon(painterResource(icon), contentDescription = null, tint = color)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = color, maxLines = 1)
+    }
+}
+
+/**
+ * Presse-papiers non vide : « Presse-papiers : 3 éléments à copier » puis « Coller ici » (ou « Déplacer ici »)
+ * et « Vider le presse-papiers ». Placé juste après le fil d'Ariane pour être trouvé sans parcourir la liste.
+ */
+@Composable
+private fun ClipboardBanner(clip: ClipContent, pasting: Boolean, onPaste: () -> Unit, onClear: () -> Unit) {
+    val count = clip.items.size
+    val copy = clip.mode == TransferMode.COPY
+    val text = if (pasting) {
+        stringResource(if (copy) R.string.paste_in_progress_copy else R.string.paste_in_progress_move)
+    } else {
+        pluralStringResource(
+            if (copy) R.plurals.clipboard_banner_copy else R.plurals.clipboard_banner_move,
+            count,
+            count,
+            clip.items.first().name,
+        )
+    }
+    Column(Modifier.background(MaterialTheme.colorScheme.secondaryContainer)) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 8.dp),
+        )
+        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+            TextButton(onClick = onPaste, enabled = !pasting) {
+                Icon(painterResource(R.drawable.ic_paste), contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.action_share))
+                Text(stringResource(if (copy) R.string.action_paste_here else R.string.action_move_here))
             }
-            TextButton(onClick = onTrash, enabled = enabled) {
-                Icon(painterResource(R.drawable.ic_delete), contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.action_move_to_trash))
+            TextButton(onClick = onClear, enabled = !pasting) {
+                Text(stringResource(R.string.action_clear_clipboard))
             }
         }
     }
@@ -425,7 +497,7 @@ private fun Breadcrumb(crumbs: List<Crumb>, onJump: (String?) -> Unit) {
 /**
  * Une ligne = un seul élément TalkBack : nom, type, taille, date.
  * Appui double : ouvrir. Les autres actions sont des actions personnalisées TalkBack,
- * dans l'ordre : ouvrir avec, partager, renommer, (copier, déplacer à venir), favori, détails,
+ * dans l'ordre : ouvrir avec, partager, renommer, copier, déplacer, favori, sélectionner, détails,
  * et en dernier, comme sur iOS, mettre à la corbeille (moins de risque de le déclencher par erreur).
  *
  * En mode sélection, la ligne devient une case à cocher : « …, case à cocher, cochée » ;
@@ -449,6 +521,8 @@ private fun FileRow(
     val detailsLabel = stringResource(R.string.action_details)
     val trashLabel = stringResource(R.string.action_move_to_trash)
     val selectLabel = stringResource(R.string.action_select)
+    val copyLabel = stringResource(R.string.action_copy)
+    val moveLabel = stringResource(R.string.action_move)
     val checkLabel = stringResource(if (selected) R.string.toggle_unselect else R.string.toggle_select)
 
     Column {
@@ -474,6 +548,8 @@ private fun FileRow(
                             add(CustomAccessibilityAction(shareLabel) { actions.share(item); true })
                         }
                         add(CustomAccessibilityAction(renameLabel) { actions.rename(item); true })
+                        add(CustomAccessibilityAction(copyLabel) { actions.copy(item); true })
+                        add(CustomAccessibilityAction(moveLabel) { actions.move(item); true })
                         if (item.isDirectory) {
                             // Les favoris concernent les dossiers ; les fichiers favoris viendront avec l'onglet Favoris.
                             add(CustomAccessibilityAction(favoriteLabel) { actions.toggleFavorite(item); true })
