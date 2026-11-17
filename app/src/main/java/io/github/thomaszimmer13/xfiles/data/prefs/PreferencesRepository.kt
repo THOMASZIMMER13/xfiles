@@ -36,6 +36,37 @@ class PreferencesRepository(private val context: Context) {
         val READ_SUBTITLES = booleanPreferencesKey("read_subtitles")
         /** Positions de reprise : lignes « chemin\tposition ». */
         val RESUME_POSITIONS = stringPreferencesKey("resume_positions")
+        val BUILTIN_DOCUMENTS = booleanPreferencesKey("builtin_documents")
+        val DOC_TEXT_SCALE = stringPreferencesKey("doc_text_scale")
+        /** Position de lecture des documents : lignes « chemin\tbloc ». */
+        val DOC_POSITIONS = stringPreferencesKey("doc_positions")
+    }
+
+    /** Ouvrir les documents (txt, PDF, Word…) dans le lecteur intégré (activé par défaut). */
+    val builtinDocuments: Flow<Boolean> = context.dataStore.data.map { it[Keys.BUILTIN_DOCUMENTS] ?: true }.distinctUntilChanged()
+
+    suspend fun setBuiltinDocuments(value: Boolean) = context.dataStore.edit { it[Keys.BUILTIN_DOCUMENTS] = value }.let { }
+
+    /** Taille du texte des documents : 1, 1,3 ou 1,6 fois. */
+    val docTextScale: Flow<Float> = context.dataStore.data.map { it[Keys.DOC_TEXT_SCALE]?.toFloatOrNull() ?: 1f }.distinctUntilChanged()
+
+    suspend fun setDocTextScale(value: Float) = context.dataStore.edit { it[Keys.DOC_TEXT_SCALE] = value.toString() }.let { }
+
+    val docPositions: Flow<Map<String, Int>> = context.dataStore.data.map { prefs ->
+        prefs[Keys.DOC_POSITIONS].orEmpty().lines().mapNotNull { line ->
+            val path = line.substringBefore('\t', "")
+            val index = line.substringAfter('\t', "").toIntOrNull()
+            if (path.isEmpty() || index == null) null else path to index
+        }.toMap()
+    }.distinctUntilChanged()
+
+    /** Mémorise le bloc où reprendre la lecture de [path] (0 ou null : oublier). */
+    suspend fun setDocPosition(path: String, index: Int?) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[Keys.DOC_POSITIONS].orEmpty().lines().filter { it.isNotEmpty() && it.substringBefore('\t') != path }
+            val updated = (if (index != null && index > 0) listOf("$path\t$index") else emptyList()) + current
+            prefs[Keys.DOC_POSITIONS] = updated.take(MAX_RESUME).joinToString("\n")
+        }
     }
 
     /** Réglages du lecteur intégré. */

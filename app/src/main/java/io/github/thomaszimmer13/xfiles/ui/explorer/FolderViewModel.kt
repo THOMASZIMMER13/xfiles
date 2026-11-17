@@ -393,6 +393,25 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /** Crée un fichier texte vide puis l'ouvre dans l'éditeur ([then] reçoit son chemin). */
+    fun suggestedFileName(base: String): String = NameValidator.uniqueName(base, rawItems.map { it.name }, keepExtension = true)
+
+    fun createTextFile(name: String, then: (String) -> Unit) {
+        val parent = _state.value.path ?: return
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val file = java.io.File(parent, name)
+            val ok = withContext(Dispatchers.IO) { runCatching { file.createNewFile() }.getOrDefault(false) }
+            if (ok) {
+                refreshQuietly(parent)
+                announcer.announce(app.getString(R.string.text_file_created, name))
+                then(file.path)
+            } else {
+                announcer.announce(app.getString(R.string.op_failed, name))
+            }
+        }
+    }
+
     fun rename(item: FileItem, newName: String) {
         val parent = _state.value.path ?: return
         viewModelScope.launch {

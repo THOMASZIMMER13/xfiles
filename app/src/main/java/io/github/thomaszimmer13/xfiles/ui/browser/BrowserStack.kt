@@ -14,6 +14,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
 import io.github.thomaszimmer13.xfiles.data.media.Category
+import io.github.thomaszimmer13.xfiles.ui.document.DocumentScreen
+import io.github.thomaszimmer13.xfiles.ui.document.EditorScreen
 import io.github.thomaszimmer13.xfiles.ui.explorer.FolderScreen
 import io.github.thomaszimmer13.xfiles.ui.storage.CategoryScreen
 import io.github.thomaszimmer13.xfiles.ui.storage.CleanupKind
@@ -37,6 +39,14 @@ object Routes {
     private const val CATEGORY = "xfiles:categorie:"
     private const val CLEANUP = "xfiles:nettoyage:"
     const val STORAGE = "xfiles:stockage"
+    private const val DOCUMENT = "xfiles:document:"
+    private const val EDITOR = "xfiles:editeur:"
+
+    /** Lecteur de documents intégré. */
+    fun document(path: String) = DOCUMENT + path
+
+    /** Éditeur de texte intégré. */
+    fun editor(path: String) = EDITOR + path
 
     fun category(category: Category) = CATEGORY + category.name
 
@@ -57,6 +67,8 @@ object Routes {
         data class CategoryList(val category: Category) : Route
         data object Storage : Route
         data class Cleanup(val kind: CleanupKind) : Route
+        data class DocumentView(val path: String) : Route
+        data class Editor(val path: String) : Route
     }
 
     fun parse(route: String): Route = when {
@@ -65,6 +77,8 @@ object Routes {
         route == STORAGE -> Route.Storage
         route.startsWith(CATEGORY) -> runCatching { Route.CategoryList(Category.valueOf(route.removePrefix(CATEGORY))) }.getOrElse { Route.Folder(route) }
         route.startsWith(CLEANUP) -> runCatching { Route.Cleanup(CleanupKind.valueOf(route.removePrefix(CLEANUP))) }.getOrElse { Route.Folder(route) }
+        route.startsWith(DOCUMENT) -> Route.DocumentView(route.removePrefix(DOCUMENT))
+        route.startsWith(EDITOR) -> Route.Editor(route.removePrefix(EDITOR))
         route.startsWith(SEARCH) -> Route.Search(route.removePrefix(SEARCH).ifEmpty { null })
         route.startsWith(ZIP) -> route.removePrefix(ZIP).let { Route.Zip(it.substringBefore('\u0000'), it.substringAfter('\u0000', "")) }
         else -> Route.Folder(route)
@@ -74,6 +88,8 @@ object Routes {
     fun focusPathOf(route: String?): String? = when (val r = route?.let(::parse)) {
         is Route.Folder -> r.path
         is Route.Zip -> r.path
+        is Route.DocumentView -> r.path
+        is Route.Editor -> r.path
         else -> null
     }
 }
@@ -168,6 +184,8 @@ fun BrowserStack(
             Routes.Route.Storage -> StorageScreen(onOpen = ::open, onBack = ::goUp)
             is Routes.Route.CategoryList -> CategoryScreen(route.category, onOpen = ::open, onReveal = ::reveal, onBack = ::goUp)
             is Routes.Route.Cleanup -> CleanupScreen(route.kind, onReveal = ::reveal, onBack = ::goUp)
+            is Routes.Route.DocumentView -> DocumentScreen(path = route.path, onOpen = ::open, onBack = ::goUp)
+            is Routes.Route.Editor -> EditorScreen(path = route.path, onBack = ::goUp)
             is Routes.Route.Search -> SearchScreen(scope = route.scope, onOpen = ::open, onReveal = ::reveal, onBack = ::goUp)
             is Routes.Route.Zip -> ZipScreen(
                 zipPath = route.path,

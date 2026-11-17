@@ -26,7 +26,10 @@ import io.github.thomaszimmer13.xfiles.data.media.MediaKinds
 import io.github.thomaszimmer13.xfiles.player.PlayerHub
 import io.github.thomaszimmer13.xfiles.data.open.FileOpener
 import io.github.thomaszimmer13.xfiles.ui.browser.Routes
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import io.github.thomaszimmer13.xfiles.data.document.DocumentReader
 
 /**
  * Ouvrir un élément, partout dans l'app, de la même façon :
@@ -41,6 +44,7 @@ class FileLauncher internal constructor(
     private val texts: Texts,
     private val incoming: IncomingRequests,
     private val player: PlayerHub,
+    private val builtinDocuments: () -> Boolean,
 ) {
     /** Ajoute des fichiers audio ou vidéo à la file de lecture. */
     fun enqueue(paths: List<String>) = player.enqueue(paths)
@@ -61,6 +65,11 @@ class FileLauncher internal constructor(
             player.handles(name) -> {
                 record(path)
                 if (MediaKinds.isPlaylist(name)) player.openPlaylist(path) else player.openFile(path)
+            }
+            // Documents (txt, PDF, Word, epub…) : lecteur intégré (sauf si désactivé dans les réglages).
+            builtinDocuments() && DocumentReader.supports(name) -> {
+                record(path)
+                onRoute(Routes.document(path))
             }
             else -> {
                 record(path)
@@ -126,6 +135,10 @@ fun rememberFileLauncher(onRoute: (String) -> Unit, onProblem: (String) -> Unit)
         failed = stringResource(R.string.open_failed),
         wrongType = stringResource(R.string.pick_wrong_type),
     )
+    val documents = remember(context) {
+        (context.applicationContext as XFilesApplication).container.preferences.builtinDocuments
+            .stateIn(scope, SharingStarted.Eagerly, true)
+    }
     return remember(context, texts.openWith) {
         val container = (context.applicationContext as XFilesApplication).container
         val preferences = container.preferences
@@ -137,6 +150,7 @@ fun rememberFileLauncher(onRoute: (String) -> Unit, onProblem: (String) -> Unit)
             onProblem = { problem(it) },
             record = { path -> scope.launch { preferences.recordOpened(path) } },
             texts = texts,
+            builtinDocuments = { documents.value },
         )
     }
 }

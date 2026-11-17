@@ -104,6 +104,7 @@ fun FolderScreen(
     var detailsPath by rememberSaveable { mutableStateOf<String?>(null) }
     var playlistPath by rememberSaveable { mutableStateOf<String?>(null) }
     var showNewFolderDialog by rememberSaveable { mutableStateOf(false) }
+    var showNewTextDialog by rememberSaveable { mutableStateOf(false) }
     // Chemin de l'élément en cours de renommage (null = dialogue fermé).
     var renamePath by rememberSaveable { mutableStateOf<String?>(null) }
     // Chemin de l'élément dont la mise à la corbeille est à confirmer.
@@ -228,6 +229,9 @@ fun FolderScreen(
                     IconButton(onClick = { showNewFolderDialog = true }) {
                         Icon(painterResource(R.drawable.ic_new_folder), contentDescription = stringResource(R.string.new_folder_title))
                     }
+                    IconButton(onClick = { showNewTextDialog = true }) {
+                        Icon(painterResource(R.drawable.ic_document), contentDescription = stringResource(R.string.new_text_title))
+                    }
                     IconButton(onClick = { onOpen(Routes.search(path)) }) {
                         Icon(painterResource(R.drawable.ic_search), contentDescription = stringResource(R.string.action_search))
                     }
@@ -337,6 +341,22 @@ fun FolderScreen(
                 viewModel.createFolder(it)
             },
             onDismiss = { showNewFolderDialog = false },
+        )
+    }
+
+    if (showNewTextDialog) {
+        val defaultName = stringResource(R.string.new_text_default)
+        NameDialog(
+            title = stringResource(R.string.new_text_title),
+            confirmLabel = stringResource(R.string.action_create),
+            initialName = remember(defaultName) { viewModel.suggestedFileName(defaultName) },
+            keepExtension = true,
+            check = { viewModel.checkName(it) },
+            onConfirm = {
+                showNewTextDialog = false
+                viewModel.createTextFile(it) { created -> onOpen(Routes.editor(created)) }
+            },
+            onDismiss = { showNewTextDialog = false },
         )
     }
 

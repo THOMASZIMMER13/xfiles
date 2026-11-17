@@ -110,9 +110,9 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         return results to false
     }
 
-    private companion object {
-        const val DEBOUNCE_MS = 400L
-        const val MAX_RESULTS = 300
+    companion object {
+        private const val DEBOUNCE_MS = 400L
+        private const val MAX_RESULTS = 300
 
         /** Sans majuscules ni accents : « éte » trouve « Été 2024 ». */
         fun normalize(text: String): String =

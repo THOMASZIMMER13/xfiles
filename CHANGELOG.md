@@ -52,7 +52,16 @@ Première version publique : un gestionnaire de fichiers pensé d'abord pour Tal
 - Vidéo : commandes toujours affichées avec TalkBack, choix de la piste audio (audiodescription signalée), sous-titres intégrés ou posés à côté (srt, vtt, ass), lecture des sous-titres par TalkBack en option, image dans l'image.
 - Décodeur FFmpeg pour les formats que le téléphone ne lit pas (AC3, E-AC3, DTS, TrueHD…).
 
+### Documents
+- Lecteur intégré pour les textes (txt, code, Markdown, CSV), PDF avec texte, Word (docx), LibreOffice (odt), livres epub et pages web.
+- Un élément TalkBack par paragraphe ; titres navigables par titres ; début de page des PDF annoncé « Page 3 sur 12 » ; tableaux lus « Nom : Bob, Ville : Lyon ».
+- Liens, numéros de téléphone, courriels et adresses postales repérés : actions « Appeler », « Écrire à », « Ouvrir le lien », « Ouvrir l'adresse dans les cartes » ; « Copier le paragraphe ».
+- Recherche dans le document (« Résultat 2 sur 7 »), sommaire, aller à une page, trois tailles de texte, reprise de la lecture là où on l'avait laissée.
+- PDF protégés par mot de passe ; PDF scannés signalés, avec « Ouvrir avec ».
+- Éditeur de texte (jusqu'à 2 Mo) : vrai champ de saisie Android, encodage et fins de ligne conservés, enregistrement sans risque, avertissement en quittant sans enregistrer. Bouton « Nouveau fichier texte » dans chaque dossier.
+
 ### Réglages
 - Confirmation avant la corbeille (désactivable), fichiers cachés, informations sur la version et la licence.
 - Annoncer la position dans les listes (« 3 sur 12 »), sons de confirmation discrets (réussite, échec), tous deux désactivables.
 - Lecteur : lecteur intégré ou habituel, durées de recul et d'avance, lecture des sous-titres.
+- Documents : lecteur de documents intégré ou application habituelle.

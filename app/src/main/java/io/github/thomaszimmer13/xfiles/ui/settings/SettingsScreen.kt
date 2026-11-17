@@ -65,6 +65,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     val player = preferences.playerSettings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PreferencesRepository.PlayerSettings())
 
+    val builtinDocuments = preferences.builtinDocuments.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    fun setBuiltinDocuments(value: Boolean) {
+        viewModelScope.launch { preferences.setBuiltinDocuments(value) }
+    }
+
     fun setBuiltinPlayer(value: Boolean) {
         viewModelScope.launch { preferences.setBuiltinPlayer(value) }
     }
@@ -109,6 +115,7 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = viewModel(
     val announcePosition by viewModel.announcePosition.collectAsStateWithLifecycle()
     val feedbackSounds by viewModel.feedbackSounds.collectAsStateWithLifecycle()
     val player by viewModel.player.collectAsStateWithLifecycle()
+    val builtinDocuments by viewModel.builtinDocuments.collectAsStateWithLifecycle()
     var skipDialog by remember { mutableStateOf<Boolean?>(null) }
     val context = LocalContext.current
     val version = remember {
@@ -170,6 +177,14 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = viewModel(
                 detail = stringResource(R.string.settings_read_subtitles_detail),
                 checked = player.readSubtitles,
                 onChange = viewModel::setReadSubtitles,
+            )
+
+            SectionHeader(stringResource(R.string.settings_section_documents))
+            SwitchRow(
+                label = stringResource(R.string.settings_builtin_documents),
+                detail = stringResource(R.string.settings_builtin_documents_detail),
+                checked = builtinDocuments,
+                onChange = viewModel::setBuiltinDocuments,
             )
 
             SectionHeader(stringResource(R.string.settings_section_about))

@@ -65,6 +65,8 @@ android {
 
     packaging {
         resources.excludes += setOf("META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*")
+        // Données de cryptographie post-quantique de Bouncy Castle (dépendance de pdfbox), inutiles ici.
+        resources.excludes += "org/bouncycastle/pqc/**"
     }
 }
 
@@ -93,6 +95,10 @@ dependencies {
     implementation(libs.media3.session)
     implementation(libs.media3.ui.compose)
     implementation(libs.media3.ffmpeg.decoder)
+
+    // Lecteur de documents
+    implementation(libs.jsoup)
+    implementation(libs.pdfbox.android)
 
     testImplementation(libs.junit)
     // Tests d'accessibilité de l'interface sur la JVM (Robolectric) : structure lue par TalkBack.
