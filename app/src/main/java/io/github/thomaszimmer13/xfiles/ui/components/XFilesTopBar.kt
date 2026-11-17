@@ -33,6 +33,7 @@ import io.github.thomaszimmer13.xfiles.R
  * @param onBack si non nul, affiche un bouton « Retour » avant le titre.
  * @param titleFocus permet de placer le focus TalkBack sur le titre à l'ouverture d'un dossier.
  * @param actions boutons à droite du titre (lus après lui par TalkBack).
+ * @param backIcon, backLabel icône et libellé du bouton de gauche (« Terminer la sélection »…).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -42,6 +43,8 @@ fun XFilesTopBar(
     onBack: (() -> Unit)? = null,
     titleFocus: FocusRequester? = null,
     actions: @Composable RowScope.() -> Unit = {},
+    backIcon: Int = R.drawable.ic_back,
+    backLabel: String? = null,
 ) {
     TopAppBar(
         actions = actions,
@@ -50,7 +53,7 @@ fun XFilesTopBar(
         navigationIcon = {
             if (onBack != null) {
                 IconButton(onClick = onBack) {
-                    Icon(painterResource(R.drawable.ic_back), contentDescription = stringResource(R.string.action_back))
+                    Icon(painterResource(backIcon), contentDescription = backLabel ?: stringResource(R.string.action_back))
                 }
             }
         },

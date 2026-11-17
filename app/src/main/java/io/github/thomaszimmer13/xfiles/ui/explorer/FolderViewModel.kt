@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.thomaszimmer13.xfiles.R
 import io.github.thomaszimmer13.xfiles.XFilesApplication
+import io.github.thomaszimmer13.xfiles.a11y.FileDescriptions
 import io.github.thomaszimmer13.xfiles.data.source.FileItem
 import io.github.thomaszimmer13.xfiles.data.source.FileOperationException
 import io.github.thomaszimmer13.xfiles.domain.Breadcrumbs
@@ -35,6 +36,9 @@ data class FolderUiState(
     val sort: SortOptions = SortOptions(),
     /** Où placer le focus TalkBack après une création, un renommage ou une suppression. */
     val focusRequest: FocusRequest? = null,
+    /** Mode sélection : un appui double coche ou décoche au lieu d'ouvrir. */
+    val selecting: Boolean = false,
+    val selected: Set<String> = emptySet(),
 )
 
 sealed interface FocusRequest {
@@ -45,10 +49,20 @@ sealed interface FocusRequest {
 }
 
 /** Élément voisin de [path] dans [items] (le suivant, sinon le précédent), pour y poser le focus après sa disparition. */
-internal fun <T> neighborFocus(items: List<T>, path: String, pathOf: (T) -> String): FocusRequest {
-    val index = items.indexOfFirst { pathOf(it) == path }
-    val neighbor = items.getOrNull(index + 1) ?: items.getOrNull(index - 1)
-    return if (index < 0 || neighbor == null) FocusRequest.Title else FocusRequest.Item(pathOf(neighbor))
+internal fun <T> neighborFocus(items: List<T>, path: String, pathOf: (T) -> String): FocusRequest =
+    focusAfterRemoval(items.map(pathOf), setOf(path))
+
+/**
+ * Où placer le focus quand les éléments [removed] disparaissent de la liste [before] :
+ * sur le premier élément restant après le premier supprimé, sinon sur le dernier restant avant,
+ * sinon sur le titre.
+ */
+internal fun focusAfterRemoval(before: List<String>, removed: Set<String>): FocusRequest {
+    val first = before.indexOfFirst { it in removed }
+    if (first < 0) return FocusRequest.Title
+    val after = before.drop(first).firstOrNull { it !in removed }
+    val previous = before.take(first).lastOrNull()
+    return (after ?: previous)?.let { FocusRequest.Item(it) } ?: FocusRequest.Title
 }
 
 /** Contenu du dossier affiché dans l'onglet Explorer. */
@@ -116,7 +130,104 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
     /** Contenu relu sans passer par l'état « Chargement… », pour ne pas faire perdre le focus. */
     private suspend fun refreshQuietly(path: String) {
         rawItems = fileSource.list(path, includeHidden = _state.value.sort.showHidden)
-        _state.update { it.copy(items = FileSorter.sort(rawItems, it.sort), error = false) }
+        val present = rawItems.mapTo(HashSet()) { it.path }
+        _state.update {
+            it.copy(items = FileSorter.sort(rawItems, it.sort), error = false, selected = it.selected intersect present)
+        }
+    }
+
+    // --- Sélection multiple ---
+
+    /**
+     * Entre en mode sélection.
+     * @param first élément à cocher d'emblée (action « Sélectionner » sur une ligne : le focus y reste) ;
+     * null depuis le bouton de la barre du haut, qui disparaît : le focus va alors sur le titre.
+     */
+    fun startSelection(first: FileItem? = null) {
+        _state.update {
+            it.copy(
+                selecting = true,
+                selected = setOfNotNull(first?.path),
+                focusRequest = if (first == null) FocusRequest.Title else it.focusRequest,
+            )
+        }
+        if (first != null) {
+            val app = getApplication<Application>()
+            announcer.announce(app.getString(R.string.selection_started_with, FileDescriptions.selectedCount(1)))
+        }
+    }
+
+    /** @param moveFocusToTitle vrai quand le bouton « Terminer la sélection », qui disparaît, avait le focus. */
+    fun endSelection(moveFocusToTitle: Boolean) {
+        if (!_state.value.selecting) return
+        _state.update {
+            it.copy(
+                selecting = false,
+                selected = emptySet(),
+                focusRequest = if (moveFocusToTitle) FocusRequest.Title else it.focusRequest,
+            )
+        }
+        announcer.announce(getApplication<Application>().getString(R.string.selection_ended))
+    }
+
+    /** Coche ou décoche ; TalkBack dit « coché », puis le nouveau total est annoncé. */
+    fun toggleSelection(item: FileItem) {
+        _state.update {
+            it.copy(selected = if (item.path in it.selected) it.selected - item.path else it.selected + item.path)
+        }
+        announcer.announce(FileDescriptions.selectedCount(_state.value.selected.size).replaceFirstChar { it.uppercase() } + ".")
+    }
+
+    fun toggleSelectAll() {
+        _state.update {
+            val all = it.items.mapTo(HashSet()) { item -> item.path }
+            it.copy(selected = if (it.selected.containsAll(all)) emptySet() else all)
+        }
+        announcer.announce(FileDescriptions.selectedCount(_state.value.selected.size).replaceFirstChar { it.uppercase() } + ".")
+    }
+
+    fun selectedItems(): List<FileItem> = _state.value.let { s -> s.items.filter { it.path in s.selected } }
+
+    fun moveSelectionToTrash() = runOnSelection(R.plurals.moved_to_trash_many) {
+        withContext(Dispatchers.IO) { trash.moveToTrash(it.path) }
+    }
+
+    fun deleteSelectionForever() = runOnSelection(R.plurals.deleted_forever_many) { fileSource.delete(it.path) }
+
+    /**
+     * Applique [operation] à chaque élément sélectionné, puis quitte le mode sélection
+     * et annonce le bilan en une seule phrase (« 3 éléments mis à la corbeille. »).
+     */
+    private fun runOnSelection(doneMessage: Int, operation: suspend (FileItem) -> Unit) {
+        val parent = _state.value.path ?: return
+        val targets = selectedItems()
+        if (targets.isEmpty()) return
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val done = mutableSetOf<String>()
+            for (item in targets) {
+                try {
+                    operation(item)
+                    done += item.path
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // Compté dans le bilan ; on continue avec les autres.
+                }
+            }
+            val before = _state.value.items.map { it.path }
+            runCatching { refreshQuietly(parent) }
+            _state.update {
+                it.copy(selecting = false, selected = emptySet(), focusRequest = focusAfterRemoval(before, done))
+            }
+            val failed = targets.size - done.size
+            val res = app.resources
+            val message = buildList {
+                if (done.isNotEmpty()) add(res.getQuantityString(doneMessage, done.size, done.size))
+                if (failed > 0) add(res.getQuantityString(R.plurals.op_failures, failed, failed))
+            }.joinToString(" ")
+            announcer.announce(message)
+        }
     }
 
     fun consumeFocusRequest() {

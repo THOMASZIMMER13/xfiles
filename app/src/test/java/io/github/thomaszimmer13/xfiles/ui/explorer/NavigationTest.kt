@@ -14,3 +14,14 @@ class NavigationTest {
         assertNull(directChildToward("/a", null))
     }
 }
+
+class FocusAfterRemovalTest {
+    private val list = listOf("a", "b", "c", "d")
+
+    @org.junit.Test fun nextRemainingThenPrevious() {
+        org.junit.Assert.assertEquals(FocusRequest.Item("d"), focusAfterRemoval(list, setOf("b", "c")))
+        org.junit.Assert.assertEquals(FocusRequest.Item("b"), focusAfterRemoval(list, setOf("c", "d")))
+        org.junit.Assert.assertEquals(FocusRequest.Title, focusAfterRemoval(list, list.toSet()))
+        org.junit.Assert.assertEquals(FocusRequest.Title, focusAfterRemoval(list, emptySet()))
+    }
+}

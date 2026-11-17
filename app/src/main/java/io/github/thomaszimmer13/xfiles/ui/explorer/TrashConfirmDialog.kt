@@ -30,7 +30,11 @@ import androidx.compose.ui.unit.dp
 import io.github.thomaszimmer13.xfiles.R
 
 /**
- * Confirmation de « Mettre à la corbeille », avec une case facultative pour supprimer définitivement.
+ * Confirmation de « Mettre à la corbeille » (un élément ou une sélection),
+ * avec une case facultative pour supprimer définitivement.
+ *
+ * @param trashMessage message affiché tant que la case n'est pas cochée ;
+ * @param deleteMessage message affiché quand elle l'est.
  *
  * Ordre de lecture : titre → message → case à cocher → Annuler → bouton de confirmation.
  * Quand la case change, le message (zone lue automatiquement) annonce la conséquence,
@@ -38,7 +42,8 @@ import io.github.thomaszimmer13.xfiles.R
  */
 @Composable
 fun TrashConfirmDialog(
-    name: String,
+    trashMessage: String,
+    deleteMessage: String,
     onMoveToTrash: () -> Unit,
     onDeleteForever: () -> Unit,
     onDismiss: () -> Unit,
@@ -56,11 +61,7 @@ fun TrashConfirmDialog(
         text = {
             Column {
                 Text(
-                    text = if (permanent) {
-                        stringResource(R.string.confirm_delete_message, name)
-                    } else {
-                        stringResource(R.string.confirm_trash_message, name)
-                    },
+                    text = if (permanent) deleteMessage else trashMessage,
                     modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                 )
                 // Une seule zone TalkBack : « Supprimer définitivement…, case à cocher, non cochée ».

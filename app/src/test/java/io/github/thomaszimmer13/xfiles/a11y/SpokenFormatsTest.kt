@@ -34,6 +34,12 @@ class SpokenFormatsTest {
         assertEquals("dimanche 1er mars 2026 à 14 h 00", DateFormatter.full(at(2026, 3, 1, 14), now))
     }
 
+    @Test fun selection() {
+        assertEquals("aucun élément sélectionné", FileDescriptions.selectedCount(0))
+        assertEquals("1 élément sélectionné", FileDescriptions.selectedCount(1))
+        assertEquals("3 éléments sélectionnés", FileDescriptions.selectedCount(3))
+    }
+
     @Test fun types() {
         assertEquals("dossier", FileTypeDescriber.describe("Factures", isDirectory = true))
         assertEquals("document PDF", FileTypeDescriber.describe("Facture.PDF", isDirectory = false))

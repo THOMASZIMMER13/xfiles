@@ -163,4 +163,44 @@
         <item quantity="many">Les %1$d éléments de la corbeille seront supprimés définitivement. Cette action est irréversible.</item>
         <item quantity="other">Les %1$d éléments de la corbeille seront supprimés définitivement. Cette action est irréversible.</item>
     </plurals>
+
+    <!-- Sélection multiple -->
+    <string name="action_select">Sélectionner</string>
+    <string name="action_end_selection">Terminer la sélection</string>
+    <string name="action_select_all">Tout sélectionner</string>
+    <string name="action_unselect_all">Tout désélectionner</string>
+    <!-- Lus après « Appuyez deux fois pour » -->
+    <string name="toggle_select">cocher</string>
+    <string name="toggle_unselect">décocher</string>
+    <!-- %1$s : « 1 élément sélectionné » -->
+    <string name="selection_started_with">Sélection activée, %1$s.</string>
+    <string name="selection_ended">Sélection terminée.</string>
+    <!-- Titre lu en mode sélection. %1$s : « 3 éléments sélectionnés », %2$s : « 12 éléments » -->
+    <string name="selection_spoken">Sélection : %1$s, sur %2$s</string>
+    <string name="selection_share_folders">Seuls les fichiers peuvent être partagés. Décochez les dossiers.</string>
+    <plurals name="confirm_trash_many">
+        <item quantity="one">L\'élément sélectionné sera déplacé dans la corbeille. Vous pourrez le restaurer pendant 30 jours.</item>
+        <item quantity="many">Les %1$d éléments sélectionnés seront déplacés dans la corbeille. Vous pourrez les restaurer pendant 30 jours.</item>
+        <item quantity="other">Les %1$d éléments sélectionnés seront déplacés dans la corbeille. Vous pourrez les restaurer pendant 30 jours.</item>
+    </plurals>
+    <plurals name="confirm_delete_many">
+        <item quantity="one">L\'élément sélectionné sera supprimé définitivement. Cette action est irréversible.</item>
+        <item quantity="many">Les %1$d éléments sélectionnés seront supprimés définitivement. Cette action est irréversible.</item>
+        <item quantity="other">Les %1$d éléments sélectionnés seront supprimés définitivement. Cette action est irréversible.</item>
+    </plurals>
+    <plurals name="moved_to_trash_many">
+        <item quantity="one">%1$d élément mis à la corbeille.</item>
+        <item quantity="many">%1$d éléments mis à la corbeille.</item>
+        <item quantity="other">%1$d éléments mis à la corbeille.</item>
+    </plurals>
+    <plurals name="deleted_forever_many">
+        <item quantity="one">%1$d élément supprimé définitivement.</item>
+        <item quantity="many">%1$d éléments supprimés définitivement.</item>
+        <item quantity="other">%1$d éléments supprimés définitivement.</item>
+    </plurals>
+    <plurals name="op_failures">
+        <item quantity="one">%1$d élément n\'a pas pu être traité.</item>
+        <item quantity="many">%1$d éléments n\'ont pas pu être traités.</item>
+        <item quantity="other">%1$d éléments n\'ont pas pu être traités.</item>
+    </plurals>
 </resources>

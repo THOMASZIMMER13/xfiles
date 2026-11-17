@@ -45,6 +45,27 @@ object FileOpener {
         return start(context, Intent.createChooser(send, chooserTitle))
     }
 
+    /** Partage plusieurs fichiers d'un coup (ACTION_SEND_MULTIPLE). [files] : couples (chemin, nom). */
+    fun shareMany(context: Context, files: List<Pair<String, String>>, chooserTitle: String): Result {
+        if (files.size == 1) return share(context, files[0].first, files[0].second, chooserTitle)
+        val uris = files.map { (path, _) -> uriFor(context, path) ?: return Result.FAILED }
+        val types = files.map { (_, name) -> mimeType(name) }.distinct()
+        // Type commun : « image/jpeg » si tous identiques, « image/* » si même famille, sinon « */* ».
+        val type = when {
+            types.size == 1 -> types[0]
+            types.map { it.substringBefore('/') }.distinct().size == 1 -> types[0].substringBefore('/') + "/*"
+            else -> "*/*"
+        }
+        val send = Intent(Intent.ACTION_SEND_MULTIPLE)
+            .setType(type)
+            .putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        send.clipData = ClipData.newRawUri(files[0].second, uris[0]).apply {
+            uris.drop(1).forEach { addItem(ClipData.Item(it)) }
+        }
+        return start(context, Intent.createChooser(send, chooserTitle))
+    }
+
     fun copyToClipboard(context: Context, label: String, text: String) {
         context.getSystemService(ClipboardManager::class.java)
             ?.setPrimaryClip(ClipData.newPlainText(label, text))

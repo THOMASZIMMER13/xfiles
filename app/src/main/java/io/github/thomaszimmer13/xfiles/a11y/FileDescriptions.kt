@@ -22,6 +22,13 @@ object FileDescriptions {
         DateFormatter.short(item.lastModified),
     ).joinToString(" · ")
 
+    /** « aucun élément sélectionné », « 1 élément sélectionné », « 3 éléments sélectionnés ». */
+    fun selectedCount(count: Int): String = when (count) {
+        0 -> "aucun élément sélectionné"
+        1 -> "1 élément sélectionné"
+        else -> "$count éléments sélectionnés"
+    }
+
     /** « vide », « 1 élément », « 12 éléments ». */
     fun itemCount(count: Int): String = when (count) {
         0 -> "vide"

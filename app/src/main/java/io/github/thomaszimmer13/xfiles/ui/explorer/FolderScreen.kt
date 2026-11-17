@@ -1,5 +1,7 @@
 package io.github.thomaszimmer13.xfiles.ui.explorer
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
@@ -14,11 +16,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -33,12 +37,17 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -55,8 +64,11 @@ import io.github.thomaszimmer13.xfiles.ui.components.XFilesTopBar
 
 /**
  * Contenu d'un dossier.
- * Ordre de balayage : Retour → titre (« Factures, 12 éléments ») → Trier et afficher
- * → fil d'Ariane → fichiers → message d'état.
+ * Ordre de balayage : Retour → titre (« Factures, 12 éléments ») → Nouveau dossier → Sélectionner
+ * → Trier et afficher → fil d'Ariane → fichiers → message d'état.
+ *
+ * En mode sélection : Terminer la sélection → titre (« Sélection : 3 éléments sélectionnés, sur 12 éléments »)
+ * → Tout sélectionner → fil d'Ariane → fichiers (cases à cocher) → Partager, Mettre à la corbeille → message.
  *
  * @param focusPath chemin d'où l'on revient : le focus est replacé sur le dossier correspondant ;
  * sinon il est placé sur le titre.
@@ -81,6 +93,7 @@ fun FolderScreen(
     var renamePath by rememberSaveable { mutableStateOf<String?>(null) }
     // Chemin de l'élément dont la mise à la corbeille est à confirmer.
     var trashPath by rememberSaveable { mutableStateOf<String?>(null) }
+    var confirmSelectionTrash by rememberSaveable { mutableStateOf(false) }
 
     val context = LocalContext.current
     val openWithTitle = stringResource(R.string.chooser_open_with)
@@ -89,6 +102,7 @@ fun FolderScreen(
     val failedMessage = stringResource(R.string.open_failed)
     val pathCopiedMessage = stringResource(R.string.path_copied)
     val pathLabel = stringResource(R.string.details_path)
+    val foldersNotSharedMessage = stringResource(R.string.selection_share_folders)
 
     /** Annonce le résultat d'une transmission à une autre app, s'il y a un problème. */
     fun report(result: FileOpener.Result) {
@@ -109,14 +123,29 @@ fun FolderScreen(
         toggleFavorite = viewModel::toggleFavorite,
         details = { item -> detailsPath = item.path },
         moveToTrash = { item -> trashPath = item.path },
+        select = { item -> viewModel.startSelection(item) },
+        toggle = viewModel::toggleSelection,
     )
+
+    // Retour arrière en mode sélection : on quitte seulement la sélection, pas le dossier.
+    BackHandler(enabled = state.selecting) { viewModel.endSelection(moveFocusToTitle = false) }
 
     // Tant que le ViewModel n'a pas basculé sur ce chemin, on n'affiche rien de l'ancien dossier.
     val ready = state.path == path
     val loaded = ready && !state.loading
 
     val title = if (ready) state.crumbs.lastOrNull()?.name.orEmpty() else ""
-    val spokenTitle = if (loaded && !state.error) "$title, ${FileDescriptions.itemCount(state.items.size)}" else title
+    val selectionTitle = FileDescriptions.selectedCount(state.selected.size).replaceFirstChar { it.uppercase() }
+    val spokenTitle = when {
+        state.selecting -> stringResource(
+            R.string.selection_spoken,
+            FileDescriptions.selectedCount(state.selected.size),
+            FileDescriptions.itemCount(state.items.size),
+        )
+        loaded && !state.error -> "$title, ${FileDescriptions.itemCount(state.items.size)}"
+        else -> title
+    }
+    val allSelected = state.items.isNotEmpty() && state.selected.size == state.items.size
 
     val listState = rememberLazyListState()
     val titleFocus = remember { FocusRequester() }
@@ -156,20 +185,44 @@ fun FolderScreen(
     }
 
     Column(Modifier.fillMaxSize()) {
-        XFilesTopBar(
-            title = title,
-            spokenTitle = spokenTitle,
-            onBack = onBack,
-            titleFocus = titleFocus,
-            actions = {
-                IconButton(onClick = { showNewFolderDialog = true }) {
-                    Icon(painterResource(R.drawable.ic_new_folder), contentDescription = stringResource(R.string.new_folder_title))
-                }
-                IconButton(onClick = { showSortDialog = true }) {
-                    Icon(painterResource(R.drawable.ic_sort), contentDescription = stringResource(R.string.sort_title))
-                }
-            },
-        )
+        if (state.selecting) {
+            XFilesTopBar(
+                title = selectionTitle,
+                spokenTitle = spokenTitle,
+                onBack = { viewModel.endSelection(moveFocusToTitle = true) },
+                backIcon = R.drawable.ic_close,
+                backLabel = stringResource(R.string.action_end_selection),
+                titleFocus = titleFocus,
+                actions = {
+                    IconButton(onClick = viewModel::toggleSelectAll) {
+                        Icon(
+                            painterResource(R.drawable.ic_select_all),
+                            contentDescription = stringResource(if (allSelected) R.string.action_unselect_all else R.string.action_select_all),
+                        )
+                    }
+                },
+            )
+        } else {
+            XFilesTopBar(
+                title = title,
+                spokenTitle = spokenTitle,
+                onBack = onBack,
+                titleFocus = titleFocus,
+                actions = {
+                    IconButton(onClick = { showNewFolderDialog = true }) {
+                        Icon(painterResource(R.drawable.ic_new_folder), contentDescription = stringResource(R.string.new_folder_title))
+                    }
+                    if (loaded && state.items.isNotEmpty()) {
+                        IconButton(onClick = { viewModel.startSelection() }) {
+                            Icon(painterResource(R.drawable.ic_select), contentDescription = stringResource(R.string.action_select))
+                        }
+                    }
+                    IconButton(onClick = { showSortDialog = true }) {
+                        Icon(painterResource(R.drawable.ic_sort), contentDescription = stringResource(R.string.sort_title))
+                    }
+                },
+            )
+        }
         if (ready) Breadcrumb(state.crumbs, onJump)
 
         Box(Modifier.weight(1f)) {
@@ -182,6 +235,8 @@ fun FolderScreen(
                         FileRow(
                             item = item,
                             isFavorite = item.path in state.favorites,
+                            selecting = state.selecting,
+                            selected = item.path in state.selected,
                             focusRequester = if (item.path == (focusRequestPath ?: focusTarget)) itemFocus else null,
                             actions = actions,
                         )
@@ -189,7 +244,38 @@ fun FolderScreen(
                 }
             }
         }
+        if (state.selecting) {
+            SelectionBar(
+                enabled = state.selected.isNotEmpty(),
+                onShare = {
+                    val items = viewModel.selectedItems()
+                    if (items.any { it.isDirectory }) {
+                        viewModel.announcer.announce(foldersNotSharedMessage)
+                    } else {
+                        report(FileOpener.shareMany(context, items.map { it.path to it.name }, shareTitle))
+                    }
+                },
+                onTrash = { confirmSelectionTrash = true },
+            )
+        }
         StatusMessage(announcement)
+    }
+
+    if (confirmSelectionTrash && state.selected.isNotEmpty()) {
+        val count = state.selected.size
+        TrashConfirmDialog(
+            trashMessage = pluralStringResource(R.plurals.confirm_trash_many, count, count),
+            deleteMessage = pluralStringResource(R.plurals.confirm_delete_many, count, count),
+            onMoveToTrash = {
+                confirmSelectionTrash = false
+                viewModel.moveSelectionToTrash()
+            },
+            onDeleteForever = {
+                confirmSelectionTrash = false
+                viewModel.deleteSelectionForever()
+            },
+            onDismiss = { confirmSelectionTrash = false },
+        )
     }
 
     if (showSortDialog) {
@@ -238,7 +324,8 @@ fun FolderScreen(
     val trashItem = trashPath?.let { p -> state.items.firstOrNull { it.path == p } }
     if (trashItem != null) {
         TrashConfirmDialog(
-            name = trashItem.name,
+            trashMessage = stringResource(R.string.confirm_trash_message, trashItem.name),
+            deleteMessage = stringResource(R.string.confirm_delete_message, trashItem.name),
             onMoveToTrash = {
                 trashPath = null
                 viewModel.moveToTrash(trashItem)
@@ -275,7 +362,34 @@ private class FileRowActions(
     val toggleFavorite: (FileItem) -> Unit,
     val details: (FileItem) -> Unit,
     val moveToTrash: (FileItem) -> Unit,
+    /** Entre en mode sélection en cochant cet élément. */
+    val select: (FileItem) -> Unit,
+    /** Coche ou décoche (mode sélection). */
+    val toggle: (FileItem) -> Unit,
 )
+
+/** Actions sur la sélection, en bas de l'écran (lues après la liste). */
+@Composable
+private fun SelectionBar(enabled: Boolean, onShare: () -> Unit, onTrash: () -> Unit) {
+    Column {
+        HorizontalDivider()
+        Row(
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceEvenly,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        ) {
+            TextButton(onClick = onShare, enabled = enabled) {
+                Icon(painterResource(R.drawable.ic_share), contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.action_share))
+            }
+            TextButton(onClick = onTrash, enabled = enabled) {
+                Icon(painterResource(R.drawable.ic_delete), contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.action_move_to_trash))
+            }
+        }
+    }
+}
 
 /**
  * Fil d'Ariane : un seul élément TalkBack (« Emplacement : Mémoire interne, Documents, Factures »).
@@ -313,11 +427,16 @@ private fun Breadcrumb(crumbs: List<Crumb>, onJump: (String?) -> Unit) {
  * Appui double : ouvrir. Les autres actions sont des actions personnalisées TalkBack,
  * dans l'ordre : ouvrir avec, partager, renommer, (copier, déplacer à venir), favori, détails,
  * et en dernier, comme sur iOS, mettre à la corbeille (moins de risque de le déclencher par erreur).
+ *
+ * En mode sélection, la ligne devient une case à cocher : « …, case à cocher, cochée » ;
+ * appui double = cocher ou décocher, sans autre action.
  */
 @Composable
 private fun FileRow(
     item: FileItem,
     isFavorite: Boolean,
+    selecting: Boolean,
+    selected: Boolean,
     focusRequester: FocusRequester?,
     actions: FileRowActions,
 ) {
@@ -329,6 +448,8 @@ private fun FileRow(
     val favoriteLabel = stringResource(if (isFavorite) R.string.action_remove_favorite else R.string.action_add_favorite)
     val detailsLabel = stringResource(R.string.action_details)
     val trashLabel = stringResource(R.string.action_move_to_trash)
+    val selectLabel = stringResource(R.string.action_select)
+    val checkLabel = stringResource(if (selected) R.string.toggle_unselect else R.string.toggle_select)
 
     Column {
         Row(
@@ -337,8 +458,15 @@ private fun FileRow(
                 .fillMaxWidth()
                 .heightIn(min = 56.dp)
                 .then(if (focusRequester != null) Modifier.focusRequester(focusRequester).focusable() else Modifier)
+                .then(if (selected) Modifier.background(MaterialTheme.colorScheme.secondaryContainer) else Modifier)
                 .clearAndSetSemantics {
                     contentDescription = spoken
+                    if (selecting) {
+                        role = Role.Checkbox
+                        toggleableState = ToggleableState(selected)
+                        onClick(label = checkLabel) { actions.toggle(item); true }
+                        return@clearAndSetSemantics
+                    }
                     onClick(label = openLabel) { actions.open(item); true }
                     customActions = buildList {
                         if (!item.isDirectory) {
@@ -350,14 +478,18 @@ private fun FileRow(
                             // Les favoris concernent les dossiers ; les fichiers favoris viendront avec l'onglet Favoris.
                             add(CustomAccessibilityAction(favoriteLabel) { actions.toggleFavorite(item); true })
                         }
+                        add(CustomAccessibilityAction(selectLabel) { actions.select(item); true })
                         add(CustomAccessibilityAction(detailsLabel) { actions.details(item); true })
                         add(CustomAccessibilityAction(trashLabel) { actions.moveToTrash(item); true })
                     }
                 }
-                .clickable { actions.open(item) }
+                .clickable { if (selecting) actions.toggle(item) else actions.open(item) }
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
-            Icon(
+            if (selecting) {
+                // Décoratif : l'état est déjà porté par la ligne (case à cocher pour TalkBack).
+                Checkbox(checked = selected, onCheckedChange = null)
+            } else Icon(
                 painter = painterResource(
                     when {
                         !item.isDirectory -> R.drawable.ic_file
