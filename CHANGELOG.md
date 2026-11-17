@@ -27,8 +27,22 @@ Première version publique : un gestionnaire de fichiers pensé d'abord pour Tal
 - Favoris : dossiers et fichiers.
 
 ### Archives
-- Parcourir une archive zip comme un dossier, ouvrir un fichier qu'elle contient.
-- Extraire tout ou partie, compresser un élément ou une sélection.
+- Parcourir une archive comme un dossier, ouvrir un fichier qu'elle contient : zip, 7z, tar, tar.gz, tar.bz2, tar.xz, gz, bz2, xz, RAR (jusqu'à la version 4).
+- Archives protégées : le mot de passe est demandé, avec une case « Afficher le mot de passe » ; un mot de passe faux est annoncé.
+- Extraire tout ou partie, compresser un élément ou une sélection en zip (mot de passe AES-256 facultatif), 7z ou tar.gz, avec le nom de son choix.
+
+### Partager et échanger avec les autres apps
+- « Enregistrer dans XFiles » depuis le menu Partager de n'importe quelle app : choisir le dossier, puis « Enregistrer ici ».
+- XFiles peut servir de sélecteur de fichier (« Joindre un fichier ») : ouvrir un fichier le renvoie à l'app qui l'a demandé.
+- Raccourci d'un dossier sur l'écran d'accueil.
+
+### Catégories et nettoyage
+- Racine de l'Explorer : Téléchargements, Images, Vidéos, Audio, Documents, Archives, Applications (APK), avec leur nombre de fichiers.
+- Nettoyage et analyse : gros fichiers, doublons (contenu vérifié par empreinte SHA-256), anciens téléchargements, dossiers les plus lourds. Listes à cocher, « Garder le plus ancien de chaque groupe », espace libéré annoncé.
+- Détails : taille totale d'un dossier, empreintes MD5 et SHA-256 d'un fichier, copiables.
+- Dupliquer un fichier ou un dossier.
+- Récents : dossiers parcourus récemment. Favoris : « Monter » et « Descendre » pour les réordonner.
 
 ### Réglages
 - Confirmation avant la corbeille (désactivable), fichiers cachés, informations sur la version et la licence.
+- Annoncer la position dans les listes (« 3 sur 12 »), sons de confirmation discrets (réussite, échec), tous deux désactivables.

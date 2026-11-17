@@ -16,7 +16,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
 import io.github.thomaszimmer13.xfiles.R
 import io.github.thomaszimmer13.xfiles.XFilesApplication
-import io.github.thomaszimmer13.xfiles.data.archive.isZip
+import android.app.Activity
+import android.content.ContextWrapper
+import android.content.Intent
+import io.github.thomaszimmer13.xfiles.data.archive.isArchive
+import io.github.thomaszimmer13.xfiles.data.incoming.IncomingRequest
+import io.github.thomaszimmer13.xfiles.data.incoming.IncomingRequests
 import io.github.thomaszimmer13.xfiles.data.open.FileOpener
 import io.github.thomaszimmer13.xfiles.ui.browser.Routes
 import kotlinx.coroutines.launch
@@ -32,13 +37,17 @@ class FileLauncher internal constructor(
     private val onProblem: (String) -> Unit,
     private val record: (String) -> Unit,
     private val texts: Texts,
+    private val incoming: IncomingRequests,
 ) {
-    internal class Texts(val openWith: String, val share: String, val noApp: String, val failed: String)
+    internal class Texts(val openWith: String, val share: String, val noApp: String, val failed: String, val wrongType: String)
 
     fun open(path: String, name: String, isDirectory: Boolean) {
+        val pick = incoming.current.value as? IncomingRequest.Pick
         when {
             isDirectory -> onRoute(path)
-            isZip(name) -> {
+            // Une autre app attend un fichier : on le lui renvoie au lieu de l'ouvrir.
+            pick != null -> returnPicked(pick, path, name)
+            isArchive(name) -> {
                 record(path)
                 onRoute(Routes.zip(path))
             }
@@ -61,6 +70,24 @@ class FileLauncher internal constructor(
     /** Ouvre un fichier temporaire (aperçu d'un élément d'archive) sans l'ajouter aux récents. */
     fun openTemporary(path: String, name: String, chooser: Boolean) =
         report(FileOpener.open(context, path, name, chooserTitle = if (chooser) texts.openWith else null))
+
+    private fun returnPicked(pick: IncomingRequest.Pick, path: String, name: String) {
+        val mime = FileOpener.mimeType(name)
+        if (!pick.accepts(mime)) {
+            onProblem(texts.wrongType)
+            return
+        }
+        val activity = context.findActivity()
+        val uri = FileOpener.uriFor(context, path)
+        if (activity == null || uri == null) {
+            onProblem(texts.failed)
+            return
+        }
+        val result = Intent().setDataAndType(uri, mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        incoming.clear()
+        activity.setResult(Activity.RESULT_OK, result)
+        activity.finish()
+    }
 
     private fun report(result: FileOpener.Result) {
         when (result) {
@@ -86,10 +113,13 @@ fun rememberFileLauncher(onRoute: (String) -> Unit, onProblem: (String) -> Unit)
         share = stringResource(R.string.chooser_share),
         noApp = stringResource(R.string.open_no_app),
         failed = stringResource(R.string.open_failed),
+        wrongType = stringResource(R.string.pick_wrong_type),
     )
     return remember(context, texts.openWith) {
-        val preferences = (context.applicationContext as XFilesApplication).container.preferences
+        val container = (context.applicationContext as XFilesApplication).container
+        val preferences = container.preferences
         FileLauncher(
+            incoming = container.incoming,
             context = context,
             onRoute = { route(it) },
             onProblem = { problem(it) },
@@ -123,4 +153,14 @@ fun rememberNotificationPermission(): (then: () -> Unit) -> Unit {
             }
         }
     }
+}
+
+/** L'activité qui porte ce contexte, s'il y en a une. */
+fun Context.findActivity(): Activity? {
+    var current: Context? = this
+    while (current is ContextWrapper) {
+        if (current is Activity) return current
+        current = current.baseContext
+    }
+    return null
 }

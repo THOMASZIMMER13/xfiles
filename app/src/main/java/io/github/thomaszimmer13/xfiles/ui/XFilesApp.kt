@@ -10,6 +10,8 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -18,6 +20,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CollectionInfo
@@ -27,7 +30,11 @@ import androidx.compose.ui.semantics.collectionItemInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.thomaszimmer13.xfiles.R
+import io.github.thomaszimmer13.xfiles.XFilesApplication
+import io.github.thomaszimmer13.xfiles.data.incoming.IncomingRequest
+import io.github.thomaszimmer13.xfiles.ui.components.LocalAnnouncePosition
 import io.github.thomaszimmer13.xfiles.data.permission.StorageAccess
 import io.github.thomaszimmer13.xfiles.ui.components.XFilesTopBar
 import io.github.thomaszimmer13.xfiles.ui.browser.BrowserStack
@@ -49,7 +56,12 @@ fun XFilesApp() {
     // Vérifié à chaque retour dans l'app : l'utilisateur a pu accorder ou retirer l'accès.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { hasAccess = StorageAccess.isGranted() }
 
-    if (hasAccess) MainTabs() else PermissionGate()
+    val context = LocalContext.current
+    val container = remember(context) { (context.applicationContext as XFilesApplication).container }
+    val announcePosition by container.preferences.announcePosition.collectAsStateWithLifecycle(initialValue = true)
+    CompositionLocalProvider(LocalAnnouncePosition provides announcePosition) {
+        if (hasAccess) MainTabs() else PermissionGate()
+    }
 }
 
 @Composable
@@ -72,6 +84,23 @@ private fun MainTabs() {
     var recentsReset by rememberSaveable { mutableIntStateOf(0) }
     var favoritesReset by rememberSaveable { mutableIntStateOf(0) }
     var explorerReset by rememberSaveable { mutableIntStateOf(0) }
+    var explorerOpen by remember { mutableStateOf<String?>(null) }
+
+    // Demande d'une autre app (partage, choix de fichier) ou raccourci : on va dans l'Explorer.
+    val context = LocalContext.current
+    val incoming = remember(context) { (context.applicationContext as XFilesApplication).container.incoming }
+    val request by incoming.current.collectAsStateWithLifecycle()
+    LaunchedEffect(request) {
+        when (val r = request) {
+            is IncomingRequest.Save, is IncomingRequest.Pick -> currentTab = AppTab.EXPLORER
+            is IncomingRequest.OpenFolder -> {
+                currentTab = AppTab.EXPLORER
+                explorerOpen = r.path
+                incoming.clear()
+            }
+            null -> Unit
+        }
+    }
 
     Scaffold(
         bottomBar = {
@@ -129,7 +158,11 @@ private fun MainTabs() {
                     AppTab.FAVORITES -> BrowserStack(favoritesReset, rootLabel = stringResource(R.string.breadcrumb_go_favorites)) { open, reveal, focusPath ->
                         FavoritesScreen(onOpen = open, onReveal = reveal, focusPath = focusPath)
                     }
-                    AppTab.EXPLORER -> ExplorerScreen(resetSignal = explorerReset)
+                    AppTab.EXPLORER -> ExplorerScreen(
+                        resetSignal = explorerReset,
+                        openRequest = explorerOpen,
+                        onOpenRequestHandled = { explorerOpen = null },
+                    )
                 }
             }
         }

@@ -135,6 +135,7 @@ class TransferService : Service() {
             TransferKind.MOVE -> R.string.started_move
             TransferKind.EXTRACT -> R.string.started_extract
             TransferKind.COMPRESS -> R.string.started_compress
+            TransferKind.IMPORT -> R.string.started_import
         }
 
         /** Démarre le service ; refusé par Android si l'app vient de passer en arrière-plan : on l'ignore. */

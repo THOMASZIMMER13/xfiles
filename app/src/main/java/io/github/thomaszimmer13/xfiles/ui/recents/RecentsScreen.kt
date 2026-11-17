@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -52,6 +52,8 @@ import io.github.thomaszimmer13.xfiles.ui.components.SectionHeader
 import io.github.thomaszimmer13.xfiles.ui.components.StatusMessage
 import io.github.thomaszimmer13.xfiles.ui.components.XFilesTopBar
 import io.github.thomaszimmer13.xfiles.ui.components.itemIcon
+import io.github.thomaszimmer13.xfiles.ui.components.positioned
+import io.github.thomaszimmer13.xfiles.ui.components.IncomingBanner
 import io.github.thomaszimmer13.xfiles.ui.components.rememberFileLauncher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -65,7 +67,11 @@ import java.util.concurrent.TimeUnit
 /** Fichier récent ; [openedAt] est renseigné pour les fichiers ouverts depuis XFiles. */
 data class RecentFile(val item: FileItem, val parents: List<String>, val openedAt: Long?)
 
+/** Dossier parcouru récemment dans XFiles. */
+data class RecentFolder(val path: String, val name: String, val parents: List<String>, val openedAt: Long)
+
 data class RecentsUiState(
+    val folders: List<RecentFolder> = emptyList(),
     val opened: List<RecentFile> = emptyList(),
     val modified: List<RecentFile> = emptyList(),
     val loaded: Boolean = false,
@@ -80,11 +86,18 @@ class RecentsViewModel(application: Application) : AndroidViewModel(application)
     val state: StateFlow<RecentsUiState> = _state.asStateFlow()
     val announcer = Announcer(viewModelScope)
     private var history: List<io.github.thomaszimmer13.xfiles.data.prefs.PreferencesRepository.RecentEntry> = emptyList()
+    private var folderHistory: List<io.github.thomaszimmer13.xfiles.data.prefs.PreferencesRepository.RecentEntry> = emptyList()
 
     init {
         viewModelScope.launch {
             preferences.recentFiles.collect {
                 history = it
+                refresh()
+            }
+        }
+        viewModelScope.launch {
+            preferences.recentFolders.collect {
+                folderHistory = it
                 refresh()
             }
         }
@@ -95,8 +108,15 @@ class RecentsViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private suspend fun refresh() {
+        var folders: List<RecentFolder> = emptyList()
         val (opened, modified) = withContext(Dispatchers.IO) {
             val roots = volumes.volumeRoots()
+            val rootPaths = roots.map { it.second }.toSet()
+            // Les emplacements eux-mêmes (Mémoire interne…) sont déjà à la racine de l'Explorer.
+            folders = folderHistory.filter { it.path !in rootPaths && File(it.path).isDirectory }.take(MAX_FOLDERS).map { entry ->
+                val crumbs = Breadcrumbs.of(entry.path, roots).map { it.name }
+                RecentFolder(entry.path, crumbs.lastOrNull() ?: File(entry.path).name, crumbs.dropLast(1), entry.openedAt)
+            }
             fun describe(file: File, openedAt: Long?) =
                 RecentFile(fileItemOf(file), Breadcrumbs.of(file.parent.orEmpty(), roots).map { it.name }, openedAt)
 
@@ -110,7 +130,7 @@ class RecentsViewModel(application: Application) : AndroidViewModel(application)
                 .map { describe(it, null) }
             opened to modified
         }
-        _state.value = RecentsUiState(opened, modified, loaded = true)
+        _state.value = RecentsUiState(folders, opened, modified, loaded = true)
     }
 
     /**
@@ -152,6 +172,13 @@ class RecentsViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun removeFolder(folder: RecentFolder) {
+        viewModelScope.launch {
+            preferences.removeRecentFolder(folder.path)
+            announcer.announce(getApplication<Application>().getString(R.string.recent_removed, folder.name))
+        }
+    }
+
     fun clearHistory() {
         viewModelScope.launch {
             preferences.clearRecents()
@@ -161,6 +188,7 @@ class RecentsViewModel(application: Application) : AndroidViewModel(application)
 
     private companion object {
         const val MAX_SHOWN = 30
+        const val MAX_FOLDERS = 8
     }
 }
 
@@ -183,7 +211,8 @@ fun RecentsScreen(
 
     val rowFocus = remember { FocusRequester() }
     val focusTarget = focusPath?.let { target ->
-        (state.opened + state.modified).firstOrNull { target == it.item.path || it.item.path.startsWith("$target/") }?.item?.path
+        state.folders.firstOrNull { target == it.path || target.startsWith(it.path + "/") }?.path
+            ?: (state.opened + state.modified).firstOrNull { target == it.item.path || it.item.path.startsWith("$target/") }?.item?.path
     }
     FocusOnceEffect(ready = state.loaded && focusTarget != null) {
         withFrameNanos { }
@@ -197,7 +226,28 @@ fun RecentsScreen(
     val removeLabel = stringResource(R.string.action_remove_recent)
 
     @Composable
-    fun Row(file: RecentFile) {
+    fun FolderRow(folder: RecentFolder, index: Int, count: Int) {
+        val where = folder.parents.joinToString(", ")
+        val spoken = listOfNotNull(
+            folder.name,
+            stringResource(R.string.kind_folder),
+            DateFormatter.spoken(folder.openedAt, verb = "ouvert"),
+            if (where.isEmpty()) null else stringResource(R.string.favorite_in, where),
+        ).joinToString(", ")
+        ItemRow(
+            icon = R.drawable.ic_tab_explorer,
+            title = folder.name,
+            detail = listOf(DateFormatter.short(folder.openedAt), folder.parents.joinToString(" › ")).filter { it.isNotEmpty() }.joinToString(" · "),
+            spoken = positioned(spoken, index, count),
+            clickLabel = openLabel,
+            onClick = { onOpen(folder.path) },
+            focusRequester = if (folder.path == focusTarget) rowFocus else null,
+            actions = listOf(RowAction(removeLabel) { viewModel.removeFolder(folder) }),
+        )
+    }
+
+    @Composable
+    fun Row(file: RecentFile, index: Int, count: Int) {
         val item = file.item
         val where = file.parents.joinToString(", ")
         val date = file.openedAt?.let { DateFormatter.spoken(it, verb = "ouvert") } ?: DateFormatter.spoken(item.lastModified)
@@ -216,7 +266,7 @@ fun RecentsScreen(
                 DateFormatter.short(file.openedAt ?: item.lastModified),
                 file.parents.joinToString(" › "),
             ).filter { it.isNotEmpty() }.joinToString(" · "),
-            spoken = spoken,
+            spoken = positioned(spoken, index, count),
             clickLabel = openLabel,
             onClick = { launcher.open(item.path, item.name, false) },
             focusRequester = if (item.path == focusTarget) rowFocus else null,
@@ -233,13 +283,14 @@ fun RecentsScreen(
         XFilesTopBar(
             title = stringResource(R.string.tab_recents),
             actions = {
-                IconButton(onClick = { confirmClear = true }, enabled = state.opened.isNotEmpty()) {
+                IconButton(onClick = { confirmClear = true }, enabled = state.opened.isNotEmpty() || state.folders.isNotEmpty()) {
                     Icon(painterResource(R.drawable.ic_delete), contentDescription = stringResource(R.string.action_clear_recents))
                 }
             },
         )
+        IncomingBanner(onSaveHere = null)
         Box(Modifier.weight(1f)) {
-            if (state.loaded && state.opened.isEmpty() && state.modified.isEmpty()) {
+            if (state.loaded && state.folders.isEmpty() && state.opened.isEmpty() && state.modified.isEmpty()) {
                 Text(
                     stringResource(R.string.empty_recents),
                     style = MaterialTheme.typography.bodyLarge,
@@ -248,13 +299,17 @@ fun RecentsScreen(
                 )
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {
+                    if (state.folders.isNotEmpty()) {
+                        item(key = "h-folders") { SectionHeader(stringResource(R.string.section_recent_folders)) }
+                        itemsIndexed(state.folders, key = { _, it -> "d:" + it.path }) { i, f -> FolderRow(f, i, state.folders.size) }
+                    }
                     if (state.opened.isNotEmpty()) {
                         item(key = "h-opened") { SectionHeader(stringResource(R.string.section_recent_opened)) }
-                        items(state.opened, key = { "o:" + it.item.path }) { Row(it) }
+                        itemsIndexed(state.opened, key = { _, it -> "o:" + it.item.path }) { i, f -> Row(f, i, state.opened.size) }
                     }
                     if (state.modified.isNotEmpty()) {
                         item(key = "h-modified") { SectionHeader(stringResource(R.string.section_recent_modified)) }
-                        items(state.modified, key = { "m:" + it.item.path }) { Row(it) }
+                        itemsIndexed(state.modified, key = { _, it -> "m:" + it.item.path }) { i, f -> Row(f, i, state.modified.size) }
                     }
                 }
             }

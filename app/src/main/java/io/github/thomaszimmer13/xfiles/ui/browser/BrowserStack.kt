@@ -13,7 +13,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
+import io.github.thomaszimmer13.xfiles.data.media.Category
 import io.github.thomaszimmer13.xfiles.ui.explorer.FolderScreen
+import io.github.thomaszimmer13.xfiles.ui.storage.CategoryScreen
+import io.github.thomaszimmer13.xfiles.ui.storage.CleanupKind
+import io.github.thomaszimmer13.xfiles.ui.storage.CleanupScreen
+import io.github.thomaszimmer13.xfiles.ui.storage.StorageScreen
 import io.github.thomaszimmer13.xfiles.ui.search.SearchScreen
 import io.github.thomaszimmer13.xfiles.ui.settings.SettingsScreen
 import io.github.thomaszimmer13.xfiles.ui.trash.TrashScreen
@@ -29,6 +34,13 @@ object Routes {
     const val SETTINGS = "xfiles:reglages"
     private const val SEARCH = "xfiles:recherche:"
     private const val ZIP = "xfiles:zip:"
+    private const val CATEGORY = "xfiles:categorie:"
+    private const val CLEANUP = "xfiles:nettoyage:"
+    const val STORAGE = "xfiles:stockage"
+
+    fun category(category: Category) = CATEGORY + category.name
+
+    fun cleanup(kind: CleanupKind) = CLEANUP + kind.name
 
     /** Recherche sous [scope] ; null = tous les emplacements. */
     fun search(scope: String?) = SEARCH + scope.orEmpty()
@@ -42,11 +54,17 @@ object Routes {
         data object Settings : Route
         data class Search(val scope: String?) : Route
         data class Zip(val path: String, val inner: String) : Route
+        data class CategoryList(val category: Category) : Route
+        data object Storage : Route
+        data class Cleanup(val kind: CleanupKind) : Route
     }
 
     fun parse(route: String): Route = when {
         route == TRASH -> Route.Trash
         route == SETTINGS -> Route.Settings
+        route == STORAGE -> Route.Storage
+        route.startsWith(CATEGORY) -> runCatching { Route.CategoryList(Category.valueOf(route.removePrefix(CATEGORY))) }.getOrElse { Route.Folder(route) }
+        route.startsWith(CLEANUP) -> runCatching { Route.Cleanup(CleanupKind.valueOf(route.removePrefix(CLEANUP))) }.getOrElse { Route.Folder(route) }
         route.startsWith(SEARCH) -> Route.Search(route.removePrefix(SEARCH).ifEmpty { null })
         route.startsWith(ZIP) -> route.removePrefix(ZIP).let { Route.Zip(it.substringBefore('\u0000'), it.substringAfter('\u0000', "")) }
         else -> Route.Folder(route)
@@ -73,6 +91,9 @@ object Routes {
 fun BrowserStack(
     resetSignal: Int,
     rootLabel: String,
+    /** Dossier à ouvrir directement (raccourci de l'écran d'accueil), puis [onOpenRequestHandled]. */
+    openRequest: String? = null,
+    onOpenRequestHandled: () -> Unit = {},
     root: @Composable (open: (String) -> Unit, reveal: (String) -> Unit, focusPath: String?) -> Unit,
 ) {
     val stack: SnapshotStateList<String> = rememberSaveable(
@@ -129,12 +150,24 @@ fun BrowserStack(
         }
     }
 
+    LaunchedEffect(openRequest) {
+        if (openRequest != null) {
+            cameFrom = null
+            stack.clear()
+            stack.add(openRequest)
+            onOpenRequestHandled()
+        }
+    }
+
     // key : chaque écran a son propre état (défilement, focus), recréé à chaque visite.
     key(current) {
         when (val route = current?.let(Routes::parse)) {
             null -> root(::open, ::reveal, cameFrom)
             Routes.Route.Trash -> TrashScreen(onBack = ::goUp)
             Routes.Route.Settings -> SettingsScreen(onBack = ::goUp)
+            Routes.Route.Storage -> StorageScreen(onOpen = ::open, onBack = ::goUp)
+            is Routes.Route.CategoryList -> CategoryScreen(route.category, onOpen = ::open, onReveal = ::reveal, onBack = ::goUp)
+            is Routes.Route.Cleanup -> CleanupScreen(route.kind, onReveal = ::reveal, onBack = ::goUp)
             is Routes.Route.Search -> SearchScreen(scope = route.scope, onOpen = ::open, onReveal = ::reveal, onBack = ::goUp)
             is Routes.Route.Zip -> ZipScreen(
                 zipPath = route.path,

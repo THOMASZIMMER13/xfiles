@@ -83,6 +83,6 @@ fun ItemRow(
 /** Icône d'un élément : dossier, archive ou fichier. */
 fun itemIcon(name: String, isDirectory: Boolean): Int = when {
     isDirectory -> io.github.thomaszimmer13.xfiles.R.drawable.ic_tab_explorer
-    io.github.thomaszimmer13.xfiles.data.archive.isZip(name) -> io.github.thomaszimmer13.xfiles.R.drawable.ic_archive
+    io.github.thomaszimmer13.xfiles.data.archive.isArchive(name) -> io.github.thomaszimmer13.xfiles.R.drawable.ic_archive
     else -> io.github.thomaszimmer13.xfiles.R.drawable.ic_file
 }

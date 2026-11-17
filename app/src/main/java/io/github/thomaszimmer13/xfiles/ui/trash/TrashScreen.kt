@@ -12,7 +12,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import io.github.thomaszimmer13.xfiles.ui.components.positioned
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
@@ -137,9 +138,11 @@ fun TrashScreen(onBack: () -> Unit, viewModel: TrashViewModel = viewModel()) {
                 state.loading -> CenteredMessage(stringResource(R.string.folder_loading))
                 state.items.isEmpty() -> CenteredMessage(stringResource(R.string.trash_empty))
                 else -> LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                    items(state.items, key = { it.key }) { item ->
+                    itemsIndexed(state.items, key = { _, it -> it.key }) { index, item ->
                         TrashRow(
                             item = item,
+                            index = index,
+                            count = state.items.size,
                             focusRequester = if (item.key == focusKey) itemFocus else null,
                             onChoose = { actionsFor = item.key },
                             onRestore = { viewModel.restore(item) },
@@ -203,6 +206,8 @@ fun TrashScreen(onBack: () -> Unit, viewModel: TrashViewModel = viewModel()) {
 @Composable
 private fun TrashRow(
     item: TrashItem,
+    index: Int,
+    count: Int,
     focusRequester: FocusRequester?,
     onChoose: () -> Unit,
     onRestore: () -> Unit,
@@ -211,13 +216,17 @@ private fun TrashRow(
     val entry = item.entry
     val size = if (entry.isDirectory) entry.childCount?.let(FileDescriptions::itemCount) else SizeFormatter.spoken(entry.sizeBytes)
     val where = if (item.origin.isEmpty()) null else stringResource(R.string.favorite_in, item.origin.joinToString(", "))
-    val spoken = listOfNotNull(
-        entry.name,
-        FileTypeDescriber.describe(entry.name, entry.isDirectory),
-        size,
-        DateFormatter.spoken(entry.deletedAt, verb = "supprimé"),
-        where,
-    ).joinToString(", ")
+    val spoken = positioned(
+        listOfNotNull(
+            entry.name,
+            FileTypeDescriber.describe(entry.name, entry.isDirectory),
+            size,
+            DateFormatter.spoken(entry.deletedAt, verb = "supprimé"),
+            where,
+        ).joinToString(", "),
+        index,
+        count,
+    )
     val visibleDetail = listOfNotNull(
         if (entry.isDirectory) entry.childCount?.let(FileDescriptions::itemCount) else SizeFormatter.short(entry.sizeBytes),
         DateFormatter.short(entry.deletedAt),

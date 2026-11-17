@@ -6,12 +6,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,6 +33,7 @@ import io.github.thomaszimmer13.xfiles.R
 import io.github.thomaszimmer13.xfiles.XFilesApplication
 import io.github.thomaszimmer13.xfiles.a11y.FileDescriptions
 import io.github.thomaszimmer13.xfiles.data.archive.ArchiveEntry
+import io.github.thomaszimmer13.xfiles.data.archive.Archives
 import io.github.thomaszimmer13.xfiles.data.archive.ZipArchive
 import io.github.thomaszimmer13.xfiles.data.source.FileItem
 import io.github.thomaszimmer13.xfiles.data.source.FileOperationException
@@ -40,6 +42,9 @@ import io.github.thomaszimmer13.xfiles.ui.browser.Routes
 import io.github.thomaszimmer13.xfiles.ui.components.Announcer
 import io.github.thomaszimmer13.xfiles.ui.components.FocusOnceEffect
 import io.github.thomaszimmer13.xfiles.ui.components.ItemRow
+import io.github.thomaszimmer13.xfiles.ui.components.PasswordGate
+import io.github.thomaszimmer13.xfiles.ui.components.PasswordGateDialog
+import io.github.thomaszimmer13.xfiles.ui.components.positioned
 import io.github.thomaszimmer13.xfiles.ui.components.RowAction
 import io.github.thomaszimmer13.xfiles.ui.components.StatusMessage
 import io.github.thomaszimmer13.xfiles.ui.components.XFilesTopBar
@@ -72,18 +77,34 @@ class ZipViewModel(application: Application) : AndroidViewModel(application) {
     private val _state = MutableStateFlow(ZipUiState())
     val state: StateFlow<ZipUiState> = _state.asStateFlow()
     val announcer = Announcer(viewModelScope)
+    val passwordGate = PasswordGate(viewModelScope)
 
     /** Lit l'archive (une seule fois tant qu'on reste dans la même). */
     fun load(zipPath: String) {
         if (_state.value.zipPath == zipPath && _state.value.error == null && !_state.value.loading) return
         _state.value = ZipUiState(zipPath = zipPath)
+        list(zipPath, passwordGate.knownPassword(zipPath))
+    }
+
+    private fun list(zipPath: String, password: String?) {
         viewModelScope.launch {
+            val name = File(zipPath).name
             _state.value = try {
-                ZipUiState(zipPath, withContext(Dispatchers.IO) { ZipArchive.list(zipPath) }, loading = false)
+                ZipUiState(zipPath, withContext(Dispatchers.IO) { Archives.list(zipPath, password) }, loading = false)
             } catch (e: FileOperationException) {
-                ZipUiState(zipPath, loading = false, error = getApplication<Application>().getString(e.reason.message(), File(zipPath).name))
+                if (e.reason == FileOperationException.Reason.ENCRYPTED && password == null) {
+                    // Noms chiffrés (7z, RAR) : il faut le mot de passe pour voir le contenu.
+                    passwordGate.run(zipPath, name, force = true) { list(zipPath, it) }
+                }
+                ZipUiState(zipPath, loading = false, error = getApplication<Application>().getString(e.reason.message(), name))
             }
         }
+    }
+
+    /** Réessaie après une erreur (par exemple mot de passe refusé puis dialogue fermé). */
+    fun retry(zipPath: String) {
+        _state.value = ZipUiState(zipPath = zipPath)
+        list(zipPath, passwordGate.knownPassword(zipPath))
     }
 
     /** Nom du dossier qui contient l'archive (destination des extractions). */
@@ -95,13 +116,19 @@ class ZipViewModel(application: Application) : AndroidViewModel(application) {
     /** Extrait [entry] (null = toute l'archive) à côté de l'archive. */
     fun extract(zipPath: String, entry: ArchiveEntry?) {
         val parent = File(zipPath).parent ?: return
-        if (!transfers.extract(zipPath, entry?.path, parent, parentName(zipPath))) {
-            announcer.announce(getApplication<Application>().getString(R.string.transfer_busy))
+        passwordGate.run(zipPath, File(zipPath).name) { password ->
+            if (!transfers.extract(zipPath, entry?.path, parent, parentName(zipPath), password)) {
+                announcer.announce(getApplication<Application>().getString(R.string.transfer_busy))
+            }
         }
     }
 
     /** Extrait un fichier dans le cache de l'app pour l'ouvrir dans une autre app (aperçu). */
     fun preview(zipPath: String, entry: ArchiveEntry, open: (String) -> Unit) {
+        passwordGate.run(zipPath, File(zipPath).name) { password -> previewWith(zipPath, entry, password, open) }
+    }
+
+    private fun previewWith(zipPath: String, entry: ArchiveEntry, password: String?, open: (String) -> Unit) {
         viewModelScope.launch {
             try {
                 val path = withContext(Dispatchers.IO) {
@@ -109,7 +136,7 @@ class ZipViewModel(application: Application) : AndroidViewModel(application) {
                         deleteRecursively()
                         mkdirs()
                     }
-                    ZipArchive.extract(zipPath, entry.path, dir)
+                    Archives.extract(zipPath, entry.path, dir, password = password)
                 }
                 open(path)
             } catch (e: CancellationException) {
@@ -124,7 +151,7 @@ class ZipViewModel(application: Application) : AndroidViewModel(application) {
 }
 
 /**
- * Contenu d'une archive zip, en lecture seule, parcouru comme un dossier.
+ * Contenu d'une archive (zip, 7z, tar, RAR…), en lecture seule, parcouru comme un dossier.
  * Ordre de balayage : Retour → titre (« Photos.zip, archive, 12 éléments ») → Tout extraire → éléments.
  * Fichier : appui double = ouvrir (aperçu) ; actions : ouvrir avec, extraire. Dossier : appui double = entrer.
  *
@@ -144,6 +171,7 @@ fun ZipScreen(
     val announcement by viewModel.announcer.message.collectAsStateWithLifecycle()
     val launcher = rememberFileLauncher(onRoute = onOpen, onProblem = { viewModel.announcer.announce(it) })
     val withNotifications = rememberNotificationPermission()
+    val passwordRequest by viewModel.passwordGate.request.collectAsStateWithLifecycle()
 
     val ready = state.zipPath == zipPath && !state.loading
     val children = if (ready) ZipArchive.children(state.entries, inner).sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() })) else emptyList()
@@ -191,10 +219,13 @@ fun ZipScreen(
             val error = state.error
             when {
                 !ready -> Centered(stringResource(R.string.folder_loading))
-                error != null -> Centered(error)
+                error != null -> Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(error, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
+                    TextButton(onClick = { viewModel.retry(zipPath) }) { Text(stringResource(R.string.action_retry)) }
+                }
                 children.isEmpty() -> Centered(stringResource(R.string.folder_empty))
                 else -> LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                    items(children, key = { it.path }) { entry ->
+                    itemsIndexed(children, key = { _, it -> it.path }) { index, entry ->
                         val item = FileItem(
                             path = entry.path,
                             name = entry.name,
@@ -207,7 +238,7 @@ fun ZipScreen(
                             icon = itemIcon(entry.name, entry.isDirectory),
                             title = entry.name,
                             detail = FileDescriptions.visibleDetail(item),
-                            spoken = FileDescriptions.spoken(item),
+                            spoken = positioned(FileDescriptions.spoken(item), index, children.size),
                             clickLabel = openLabel,
                             onClick = {
                                 if (entry.isDirectory) {
@@ -230,6 +261,7 @@ fun ZipScreen(
         }
         StatusMessage(announcement)
     }
+    PasswordGateDialog(passwordRequest, onSubmit = viewModel.passwordGate::submit, onDismiss = viewModel.passwordGate::dismiss)
 }
 
 @Composable

@@ -2,7 +2,12 @@ package io.github.thomaszimmer13.xfiles.data.transfer
 
 import android.app.Application
 import io.github.thomaszimmer13.xfiles.R
-import io.github.thomaszimmer13.xfiles.data.archive.ZipArchive
+import android.net.Uri
+import android.provider.OpenableColumns
+import io.github.thomaszimmer13.xfiles.data.archive.Archives
+import io.github.thomaszimmer13.xfiles.data.archive.CreateFormat
+import io.github.thomaszimmer13.xfiles.domain.NameValidator
+import io.github.thomaszimmer13.xfiles.data.feedback.Feedback
 import io.github.thomaszimmer13.xfiles.data.prefs.PreferencesRepository
 import io.github.thomaszimmer13.xfiles.data.source.FileOperationException
 import io.github.thomaszimmer13.xfiles.ui.explorer.message
@@ -23,7 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-enum class TransferKind { COPY, MOVE, EXTRACT, COMPRESS }
+enum class TransferKind { COPY, MOVE, EXTRACT, COMPRESS, IMPORT }
 
 /** Où en est l'opération en cours (affichée dans l'app et dans la notification). */
 data class TransferProgress(
@@ -40,7 +45,7 @@ data class TransferProgress(
 }
 
 /** Fin d'une opération : message à annoncer, dossier concerné, élément sur lequel poser le focus. */
-data class TransferOutcome(val message: String, val targetDir: String, val focusPath: String?)
+data class TransferOutcome(val message: String, val targetDir: String, val focusPath: String?, val failed: Boolean = false)
 
 /** Question posée quand un nom existe déjà : [othersRemaining] conflits suivent celui-ci. */
 data class ConflictPrompt(val name: String, val isDirectory: Boolean, val folder: String, val othersRemaining: Int)
@@ -60,6 +65,7 @@ class TransferManager(
     private val preferences: PreferencesRepository,
     private val clipboard: FileClipboard,
     private val transfer: LocalTransfer,
+    private val feedback: Feedback? = null,
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -106,27 +112,103 @@ class TransferManager(
         }
     }
 
-    /** Extrait [prefix] (null = toute l'archive) de [zipPath] dans [targetDir]. */
-    fun extract(zipPath: String, prefix: String?, targetDir: String, folder: String): Boolean {
-        val subject = prefix?.substringAfterLast('/') ?: File(zipPath).name
+    /** Crée une copie de chaque élément dans son propre dossier (« Rapport 2.pdf »). */
+    fun duplicate(items: List<ClipItem>, dir: String, folder: String): Boolean {
+        val subject = subjectFor(items.size, items.first().name)
+        return launchJob(TransferKind.COPY, subject, folder, total = { items.sumOf { sizeOf(File(it.path)) } }) { tracker ->
+            val outcome = pasteItems(ClipContent(items, TransferMode.COPY), dir, folder, tracker)
+            val made = outcome.focusPath
+            if (made != null && items.size == 1) outcome.copy(message = app.getString(R.string.duplicated, File(made).name)) else outcome
+        }
+    }
+
+    /** Extrait [prefix] (null = toute l'archive) de [archivePath] dans [targetDir]. */
+    fun extract(archivePath: String, prefix: String?, targetDir: String, folder: String, password: String? = null): Boolean {
+        val subject = prefix?.substringAfterLast('/') ?: File(archivePath).name
         return launchJob(TransferKind.EXTRACT, subject, folder, total = {
-            ZipArchive.uncompressedSize(ZipArchive.list(zipPath), prefix)
+            Archives.uncompressedSize(Archives.list(archivePath, password), prefix)
         }) { tracker ->
-            val created = ZipArchive.extract(zipPath, prefix, File(targetDir), tracker)
+            val created = Archives.extract(archivePath, prefix, File(targetDir), tracker, password)
             TransferOutcome(app.getString(R.string.extracted, subject, File(created).name, folder), targetDir, created)
         }
     }
 
-    /** Crée une archive zip avec [sources] dans [targetDir]. */
-    fun compress(sources: List<String>, targetDir: String, folder: String): Boolean {
+    /** Crée une archive au format [format] avec [sources] dans [targetDir] ; [name] sans extension, ou nom automatique. */
+    fun compress(
+        sources: List<String>,
+        targetDir: String,
+        folder: String,
+        format: CreateFormat = CreateFormat.ZIP,
+        password: String? = null,
+        name: String? = null,
+    ): Boolean {
         val files = sources.map(::File)
         val subject = subjectFor(files.size, files.first().name)
         return launchJob(TransferKind.COMPRESS, subject, folder, total = { files.sumOf(::sizeOf) }) { tracker ->
             val dir = File(targetDir)
-            val name = ZipArchive.archiveNameFor(files, dir.list()?.toList().orEmpty(), app.getString(R.string.archive_default_name))
-            val target = File(dir, name)
-            ZipArchive.compress(files, target, tracker)
-            TransferOutcome(app.getString(R.string.compressed, name, folder), targetDir, target.path)
+            val existing = dir.list()?.toList().orEmpty()
+            val archiveName = if (name.isNullOrBlank()) {
+                Archives.archiveNameFor(files, existing, app.getString(R.string.archive_default_name), format)
+            } else {
+                Archives.uniqueArchiveName(name.trim() + format.extension, existing, format)
+            }
+            val target = File(dir, archiveName)
+            Archives.compress(format, files, target, tracker, password)
+            TransferOutcome(app.getString(R.string.compressed, archiveName, folder), targetDir, target.path)
+        }
+    }
+
+    /** Enregistre dans [targetDir] des fichiers reçus d'une autre app (partage). */
+    fun import(uris: List<Uri>, targetDir: String, folder: String): Boolean {
+        val resolver = app.contentResolver
+        data class Incoming(val uri: Uri, val name: String, val size: Long)
+        val incoming = uris.mapIndexed { index, uri ->
+            var name: String? = null
+            var size = -1L
+            runCatching {
+                resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use { c ->
+                    if (c.moveToFirst()) {
+                        name = c.getString(0)
+                        if (!c.isNull(1)) size = c.getLong(1)
+                    }
+                }
+            }
+            val clean = name?.replace('/', '_')?.takeIf { NameValidator.check(it, emptyList()) is io.github.thomaszimmer13.xfiles.domain.NameCheck.Valid }
+                ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf { NameValidator.check(it, emptyList()) is io.github.thomaszimmer13.xfiles.domain.NameCheck.Valid }
+                ?: app.getString(R.string.import_default_name, index + 1)
+            Incoming(uri, clean, size)
+        }
+        val subject = subjectFor(incoming.size, incoming.firstOrNull()?.name.orEmpty())
+        return launchJob(TransferKind.IMPORT, subject, folder, total = { incoming.sumOf { it.size.coerceAtLeast(0) } }) { tracker ->
+            val dir = File(targetDir)
+            if (!dir.isDirectory || !dir.canWrite()) throw FileOperationException(FileOperationException.Reason.DENIED, targetDir)
+            val saved = mutableListOf<String>()
+            var failed = 0
+            for (item in incoming) {
+                if (cancelRequested) throw TransferCancelledException()
+                tracker.current = item.name
+                val target = File(dir, NameValidator.uniqueName(item.name, dir.list()?.toList().orEmpty(), keepExtension = true))
+                try {
+                    val input = resolver.openInputStream(item.uri) ?: throw FileOperationException(FileOperationException.Reason.NOT_FOUND, item.name)
+                    input.use { i -> target.outputStream().use { copyStream(i, it, tracker) } }
+                    saved += target.path
+                } catch (e: TransferCancelledException) {
+                    target.delete()
+                    throw e
+                } catch (e: CancellationException) {
+                    target.delete()
+                    throw e
+                } catch (_: Exception) {
+                    target.delete()
+                    failed++
+                }
+            }
+            val res = app.resources
+            val message = buildList {
+                if (saved.isNotEmpty()) add(res.getQuantityString(R.plurals.imported, saved.size, saved.size, File(saved.first()).name, folder))
+                if (failed > 0) add(res.getQuantityString(R.plurals.op_failures, failed, failed))
+            }.joinToString(" ")
+            TransferOutcome(message, targetDir, saved.firstOrNull(), failed = saved.isEmpty())
         }
     }
 
@@ -183,16 +265,17 @@ class TransferManager(
             } catch (e: TransferCancelledException) {
                 TransferOutcome(app.getString(R.string.operation_cancelled), "", null)
             } catch (e: FileOperationException) {
-                TransferOutcome(app.getString(e.reason.message(), subject), "", null)
+                TransferOutcome(app.getString(e.reason.message(), subject), "", null, failed = true)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                TransferOutcome(app.getString(R.string.op_failed, subject), "", null)
+                TransferOutcome(app.getString(R.string.op_failed, subject), "", null, failed = true)
             } finally {
                 slow.cancel()
                 _conflict.value = null
             }
             lastOutcome = outcome
+            if (outcome.failed) feedback?.failure() else if (outcome.focusPath != null) feedback?.success()
             _progress.value = null
             _messages.emit(outcome.message)
             _outcomes.emit(outcome)
@@ -205,6 +288,7 @@ class TransferManager(
         TransferKind.MOVE -> R.string.started_move
         TransferKind.EXTRACT -> R.string.started_extract
         TransferKind.COMPRESS -> R.string.started_compress
+        TransferKind.IMPORT -> R.string.started_import
     }
 
     private suspend fun askConflict(prompt: ConflictPrompt): ConflictAnswer {
@@ -282,6 +366,6 @@ class TransferManager(
                 add(res.getQuantityString(R.plurals.op_failures, failures.size, failures.size))
             }
         }.joinToString(" ")
-        return TransferOutcome(message, dir, done.firstOrNull())
+        return TransferOutcome(message, dir, done.firstOrNull(), failed = failures.isNotEmpty() && done.isEmpty())
     }
 }

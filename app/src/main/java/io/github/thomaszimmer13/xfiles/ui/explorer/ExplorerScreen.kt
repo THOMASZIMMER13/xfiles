@@ -14,8 +14,13 @@ const val TRASH_ROUTE = Routes.TRASH
  * @param resetSignal incrémenté quand l'onglet déjà actif est touché à nouveau : retour à la racine.
  */
 @Composable
-fun ExplorerScreen(resetSignal: Int = 0) {
-    BrowserStack(resetSignal, rootLabel = stringResource(R.string.breadcrumb_go_root)) { open, _, focusPath ->
+fun ExplorerScreen(resetSignal: Int = 0, openRequest: String? = null, onOpenRequestHandled: () -> Unit = {}) {
+    BrowserStack(
+        resetSignal,
+        rootLabel = stringResource(R.string.breadcrumb_go_root),
+        openRequest = openRequest,
+        onOpenRequestHandled = onOpenRequestHandled,
+    ) { open, _, focusPath ->
         ExplorerRootScreen(onOpen = open, focusPath = focusPath)
     }
 }

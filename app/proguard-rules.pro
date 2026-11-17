@@ -5,3 +5,6 @@
 # Garder des traces de plantage lisibles (numéros de ligne), sans exposer les noms de fichiers source.
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
+
+# junrar journalise via slf4j sans fournir d'implémentation : rien à journaliser dans l'app.
+-dontwarn org.slf4j.impl.StaticLoggerBinder

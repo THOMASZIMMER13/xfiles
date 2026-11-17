@@ -25,6 +25,42 @@ class PreferencesRepository(private val context: Context) {
         /** Fichiers ouverts depuis XFiles : « chemin<TAB>date » par ligne, le plus récent d'abord. */
         val RECENT_FILES = stringPreferencesKey("recent_files")
         val CONFIRM_TRASH = booleanPreferencesKey("confirm_trash")
+        /** Dossiers parcourus : même format que [RECENT_FILES]. */
+        val RECENT_FOLDERS = stringPreferencesKey("recent_folders")
+        val ANNOUNCE_POSITION = booleanPreferencesKey("announce_position")
+        val FEEDBACK_SOUNDS = booleanPreferencesKey("feedback_sounds")
+    }
+
+    /** Ajouter « 3 sur 12 » à la lecture de chaque élément de liste (activé par défaut). */
+    val announcePosition: Flow<Boolean> = context.dataStore.data.map { it[Keys.ANNOUNCE_POSITION] ?: true }.distinctUntilChanged()
+
+    suspend fun setAnnouncePosition(value: Boolean) {
+        context.dataStore.edit { it[Keys.ANNOUNCE_POSITION] = value }
+    }
+
+    /** Petits sons à la fin des opérations : réussite, échec (activé par défaut). */
+    val feedbackSounds: Flow<Boolean> = context.dataStore.data.map { it[Keys.FEEDBACK_SOUNDS] ?: true }.distinctUntilChanged()
+
+    suspend fun setFeedbackSounds(value: Boolean) {
+        context.dataStore.edit { it[Keys.FEEDBACK_SOUNDS] = value }
+    }
+
+    /** Dossiers ouverts récemment, le plus récent d'abord. */
+    val recentFolders: Flow<List<RecentEntry>> = context.dataStore.data.map { prefs ->
+        parseRecents(prefs[Keys.RECENT_FOLDERS])
+    }.distinctUntilChanged()
+
+    suspend fun recordFolder(path: String, now: Long = System.currentTimeMillis()) {
+        context.dataStore.edit { prefs ->
+            val list = listOf(RecentEntry(path, now)) + parseRecents(prefs[Keys.RECENT_FOLDERS]).filter { it.path != path }
+            prefs[Keys.RECENT_FOLDERS] = formatRecents(list.take(MAX_RECENT_FOLDERS))
+        }
+    }
+
+    suspend fun removeRecentFolder(path: String) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.RECENT_FOLDERS] = formatRecents(parseRecents(prefs[Keys.RECENT_FOLDERS]).filter { it.path != path })
+        }
     }
 
     /** Demander confirmation avant de mettre à la corbeille (activé par défaut). */
@@ -59,7 +95,10 @@ class PreferencesRepository(private val context: Context) {
     }
 
     suspend fun clearRecents() {
-        context.dataStore.edit { it.remove(Keys.RECENT_FILES) }
+        context.dataStore.edit {
+            it.remove(Keys.RECENT_FILES)
+            it.remove(Keys.RECENT_FOLDERS)
+        }
     }
 
     private fun parseRecents(raw: String?): List<RecentEntry> = raw.orEmpty().split('\n').mapNotNull { line ->
@@ -105,6 +144,28 @@ class PreferencesRepository(private val context: Context) {
         return nowFavorite
     }
 
+    /**
+     * Monte ([up]) ou descend un favori d'une place parmi ceux du même genre (dossiers entre eux, fichiers entre eux).
+     * @return nouvelle position (0 = premier) parmi ce genre, ou null s'il ne peut pas bouger.
+     */
+    suspend fun moveFavorite(path: String, up: Boolean, isDirectory: (String) -> Boolean): Int? {
+        var result: Int? = null
+        context.dataStore.edit { prefs ->
+            val list = prefs[Keys.FAVORITE_FOLDERS].orEmpty().split('\n').filter { it.isNotEmpty() }.toMutableList()
+            val index = list.indexOf(path)
+            if (index < 0) return@edit
+            val kind = isDirectory(path)
+            val sameKind = list.indices.filter { isDirectory(list[it]) == kind }
+            val position = sameKind.indexOf(index)
+            val target = sameKind.getOrNull(if (up) position - 1 else position + 1) ?: return@edit
+            list[index] = list[target]
+            list[target] = path
+            prefs[Keys.FAVORITE_FOLDERS] = list.joinToString("\n")
+            result = if (up) position - 1 else position + 1
+        }
+        return result
+    }
+
     /** Après un renommage ou un déplacement : favoris et récents situés à [oldPath] ou en dessous suivent. */
     suspend fun onPathRenamed(oldPath: String, newPath: String) {
         fun follow(path: String) = when {
@@ -116,10 +177,12 @@ class PreferencesRepository(private val context: Context) {
             val current = prefs[Keys.FAVORITE_FOLDERS].orEmpty().split('\n').filter { it.isNotEmpty() }
             prefs[Keys.FAVORITE_FOLDERS] = current.joinToString("\n") { follow(it) }
             prefs[Keys.RECENT_FILES] = formatRecents(parseRecents(prefs[Keys.RECENT_FILES]).map { it.copy(path = follow(it.path)) })
+            prefs[Keys.RECENT_FOLDERS] = formatRecents(parseRecents(prefs[Keys.RECENT_FOLDERS]).map { it.copy(path = follow(it.path)) })
         }
     }
 
     private companion object {
         const val MAX_RECENTS = 50
+        const val MAX_RECENT_FOLDERS = 20
     }
 }

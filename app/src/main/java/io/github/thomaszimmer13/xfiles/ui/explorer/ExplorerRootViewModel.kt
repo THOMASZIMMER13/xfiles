@@ -5,6 +5,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.thomaszimmer13.xfiles.R
 import io.github.thomaszimmer13.xfiles.XFilesApplication
+import io.github.thomaszimmer13.xfiles.data.media.Categories
+import io.github.thomaszimmer13.xfiles.data.media.Category
 import io.github.thomaszimmer13.xfiles.data.volumes.LocationKind
 import io.github.thomaszimmer13.xfiles.data.volumes.StorageLocation
 import io.github.thomaszimmer13.xfiles.domain.Breadcrumbs
@@ -32,6 +34,8 @@ data class ExplorerRootUiState(
     val favorites: List<FavoriteFolder> = emptyList(),
     /** Nombre d'éléments dans la corbeille ; null tant qu'il n'est pas connu. */
     val trashCount: Int? = null,
+    /** Nombre de fichiers par catégorie ; absent tant qu'il n'est pas connu. */
+    val categoryCounts: Map<Category, Int> = emptyMap(),
 )
 
 class ExplorerRootViewModel(application: Application) : AndroidViewModel(application) {
@@ -73,7 +77,15 @@ class ExplorerRootViewModel(application: Application) : AndroidViewModel(applica
             applyLocations(withContext(Dispatchers.IO) { volumes.currentLocations() })
             refreshFavorites()
             refreshTrashCount()
+            refreshCategories()
         }
+    }
+
+    private suspend fun refreshCategories() {
+        val counts = withContext(Dispatchers.IO) {
+            Category.entries.associateWith { c -> runCatching { Categories.count(getApplication(), c) }.getOrDefault(0) }
+        }
+        _state.update { it.copy(categoryCounts = counts) }
     }
 
     private suspend fun refreshTrashCount() {

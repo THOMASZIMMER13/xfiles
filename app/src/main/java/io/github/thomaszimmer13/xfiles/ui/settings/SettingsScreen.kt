@@ -47,6 +47,17 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val confirmTrash = preferences.confirmTrash.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
     val showHidden = preferences.sortOptions.map { it.showHidden }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
+    val announcePosition = preferences.announcePosition.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+    val feedbackSounds = preferences.feedbackSounds.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    fun setAnnouncePosition(value: Boolean) {
+        viewModelScope.launch { preferences.setAnnouncePosition(value) }
+    }
+
+    fun setFeedbackSounds(value: Boolean) {
+        viewModelScope.launch { preferences.setFeedbackSounds(value) }
+    }
+
     fun setConfirmTrash(value: Boolean) {
         viewModelScope.launch { preferences.setConfirmTrash(value) }
     }
@@ -64,6 +75,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = viewModel()) {
     val confirmTrash by viewModel.confirmTrash.collectAsStateWithLifecycle()
     val showHidden by viewModel.showHidden.collectAsStateWithLifecycle()
+    val announcePosition by viewModel.announcePosition.collectAsStateWithLifecycle()
+    val feedbackSounds by viewModel.feedbackSounds.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val version = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull().orEmpty()
@@ -86,6 +99,20 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = viewModel(
                 detail = null,
                 checked = showHidden,
                 onChange = viewModel::setShowHidden,
+            )
+
+            SectionHeader(stringResource(R.string.settings_section_accessibility))
+            SwitchRow(
+                label = stringResource(R.string.settings_announce_position),
+                detail = stringResource(R.string.settings_announce_position_detail),
+                checked = announcePosition,
+                onChange = viewModel::setAnnouncePosition,
+            )
+            SwitchRow(
+                label = stringResource(R.string.settings_sounds),
+                detail = stringResource(R.string.settings_sounds_detail),
+                checked = feedbackSounds,
+                onChange = viewModel::setFeedbackSounds,
             )
 
             SectionHeader(stringResource(R.string.settings_section_about))

@@ -6,10 +6,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
@@ -39,6 +40,8 @@ import io.github.thomaszimmer13.xfiles.ui.components.SectionHeader
 import io.github.thomaszimmer13.xfiles.ui.components.StatusMessage
 import io.github.thomaszimmer13.xfiles.ui.components.XFilesTopBar
 import io.github.thomaszimmer13.xfiles.ui.components.itemIcon
+import io.github.thomaszimmer13.xfiles.ui.components.positioned
+import io.github.thomaszimmer13.xfiles.ui.components.IncomingBanner
 import io.github.thomaszimmer13.xfiles.ui.components.rememberFileLauncher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,7 +54,13 @@ import java.io.File
 /** Un favori : [item] est nul si l'élément n'existe plus (déplacé ou supprimé hors de XFiles). */
 data class Favorite(val path: String, val name: String, val item: FileItem?, val parents: List<String>)
 
-data class FavoritesUiState(val folders: List<Favorite> = emptyList(), val files: List<Favorite> = emptyList(), val loaded: Boolean = false)
+data class FavoritesUiState(
+    val folders: List<Favorite> = emptyList(),
+    val files: List<Favorite> = emptyList(),
+    val loaded: Boolean = false,
+    /** Favori qui vient d'être monté ou descendu : le focus TalkBack reste dessus. */
+    val movedPath: String? = null,
+)
 
 class FavoritesViewModel(application: Application) : AndroidViewModel(application) {
     private val container = (application as XFilesApplication).container
@@ -95,7 +104,31 @@ class FavoritesViewModel(application: Application) : AndroidViewModel(applicatio
             folders = all.filter { it.item?.isDirectory != false },
             files = all.filter { it.item?.isDirectory == false },
             loaded = true,
+            movedPath = _state.value.movedPath,
         )
+    }
+
+    /** Monte ou descend [favorite] d'une place dans sa section, et annonce sa nouvelle position. */
+    fun move(favorite: Favorite, up: Boolean) {
+        viewModelScope.launch {
+            val isFolder = favorite.item?.isDirectory != false
+            val position = preferences.moveFavorite(favorite.path, up) { path ->
+                val f = File(path)
+                f.isDirectory || !f.exists()
+            } ?: return@launch
+            val count = if (isFolder) _state.value.folders.size else _state.value.files.size
+            _state.value = _state.value.copy(movedPath = favorite.path)
+            announcer.announce(
+                getApplication<Application>().getString(
+                    if (up) R.string.favorite_moved_up else R.string.favorite_moved_down,
+                    favorite.name, position + 1, count,
+                ),
+            )
+        }
+    }
+
+    fun consumeMoved() {
+        _state.value = _state.value.copy(movedPath = null)
     }
 
     fun remove(favorite: Favorite) {
@@ -129,9 +162,19 @@ fun FavoritesScreen(
         withFrameNanos { }
         rowFocus.requestFocus()
     }
+    // Après « Monter » ou « Descendre » : le focus suit le favori à sa nouvelle place.
+    val moved = state.movedPath
+    LaunchedEffect(moved, state.folders, state.files) {
+        if (moved == null) return@LaunchedEffect
+        withFrameNanos { }
+        runCatching { rowFocus.requestFocus() }
+        viewModel.consumeMoved()
+    }
+    val focusedPath = moved ?: focusTarget
 
     Column(Modifier.fillMaxSize()) {
         XFilesTopBar(title = stringResource(R.string.tab_favorites))
+        IncomingBanner(onSaveHere = null)
         Box(Modifier.weight(1f)) {
             if (state.loaded && state.folders.isEmpty() && state.files.isEmpty()) {
                 Text(
@@ -144,14 +187,14 @@ fun FavoritesScreen(
                 LazyColumn(Modifier.fillMaxSize()) {
                     if (state.folders.isNotEmpty()) {
                         item(key = "h-folders") { SectionHeader(stringResource(R.string.section_folders)) }
-                        items(state.folders, key = { "d:" + it.path }) { fav ->
-                            FavoriteRow(fav, if (fav.path == focusTarget) rowFocus else null, launcher::open, onReveal, viewModel::remove, launcher)
+                        itemsIndexed(state.folders, key = { _, it -> "d:" + it.path }) { index, fav ->
+                            FavoriteRow(fav, index, state.folders.size, if (fav.path == focusedPath) rowFocus else null, launcher::open, onReveal, viewModel::remove, viewModel::move, launcher)
                         }
                     }
                     if (state.files.isNotEmpty()) {
                         item(key = "h-files") { SectionHeader(stringResource(R.string.section_files)) }
-                        items(state.files, key = { "f:" + it.path }) { fav ->
-                            FavoriteRow(fav, if (fav.path == focusTarget) rowFocus else null, launcher::open, onReveal, viewModel::remove, launcher)
+                        itemsIndexed(state.files, key = { _, it -> "f:" + it.path }) { index, fav ->
+                            FavoriteRow(fav, index, state.files.size, if (fav.path == focusedPath) rowFocus else null, launcher::open, onReveal, viewModel::remove, viewModel::move, launcher)
                         }
                     }
                 }
@@ -164,10 +207,13 @@ fun FavoritesScreen(
 @Composable
 private fun FavoriteRow(
     fav: Favorite,
+    index: Int,
+    count: Int,
     focusRequester: FocusRequester?,
     open: (String, String, Boolean) -> Unit,
     onReveal: (String) -> Unit,
     onRemove: (Favorite) -> Unit,
+    onMove: (Favorite, Boolean) -> Unit,
     launcher: io.github.thomaszimmer13.xfiles.ui.components.FileLauncher,
 ) {
     val item = fav.item
@@ -184,7 +230,7 @@ private fun FavoriteRow(
         icon = itemIcon(fav.name, item?.isDirectory != false),
         title = fav.name,
         detail = detail,
-        spoken = spoken,
+        spoken = positioned(spoken, index, count),
         clickLabel = stringResource(R.string.action_open),
         onClick = item?.let { { open(it.path, it.name, it.isDirectory) } },
         focusRequester = focusRequester,
@@ -196,6 +242,8 @@ private fun FavoriteRow(
                     add(RowAction(stringResource(R.string.action_share)) { launcher.share(item.path, item.name) })
                 }
             }
+            if (index > 0) add(RowAction(stringResource(R.string.action_move_up)) { onMove(fav, true) })
+            if (index < count - 1) add(RowAction(stringResource(R.string.action_move_down)) { onMove(fav, false) })
             add(RowAction(stringResource(R.string.action_remove_favorite)) { onRemove(fav) })
         },
     )

@@ -278,6 +278,14 @@
     <string name="started_move">Déplacement de %1$s vers %2$s</string>
     <string name="started_extract">Extraction de %1$s dans %2$s</string>
     <string name="started_compress">Compression de %1$s dans %2$s</string>
+    <string name="started_import">Enregistrement de %1$s dans %2$s</string>
+    <string name="duplicated">Copie créée : %1$s.</string>
+    <string name="import_default_name">Fichier reçu %1$d</string>
+    <plurals name="imported">
+        <item quantity="one">%2$s enregistré dans %3$s.</item>
+        <item quantity="many">%1$d fichiers enregistrés dans %3$s.</item>
+        <item quantity="other">%1$d fichiers enregistrés dans %3$s.</item>
+    </plurals>
     <string name="progress_percent">%1$d %%</string>
     <string name="operation_cancelled">Opération annulée.</string>
     <string name="transfer_busy">Une autre opération est en cours. Attendez sa fin ou annulez-la depuis le bandeau en bas de l\'écran.</string>
@@ -298,7 +306,9 @@
     <string name="extracted">%1$s extrait dans %3$s, sous le nom %2$s.</string>
     <!-- %1$s : nom de l\'archive, %2$s : dossier de destination -->
     <string name="compressed">Archive %1$s créée dans %2$s.</string>
-    <string name="op_encrypted">%1$s est protégé par un mot de passe : ce type d\'archive n\'est pas encore pris en charge.</string>
+    <string name="op_encrypted">%1$s est protégé par un mot de passe.</string>
+    <string name="op_wrong_password">Mot de passe incorrect pour %1$s.</string>
+    <string name="op_unsupported" tools:ignore="Typos">Le format de %1$s n\'est pas encore pris en charge (par exemple RAR version 5).</string>
     <string name="op_bad_archive">Impossible de lire l\'archive %1$s : elle est peut-être abîmée.</string>
 
     <!-- Recherche -->
@@ -326,7 +336,13 @@
     <string name="action_clear_recents">Effacer l\'historique</string>
     <string name="action_clear">Effacer</string>
     <string name="confirm_clear_recents_title">Effacer l\'historique ?</string>
-    <string name="confirm_clear_recents_message">La liste des fichiers ouverts récemment sera vidée. Les fichiers eux-mêmes ne sont pas supprimés.</string>
+    <string name="confirm_clear_recents_message">Les listes des dossiers et fichiers ouverts récemment seront vidées. Les fichiers eux-mêmes ne sont pas supprimés.</string>
+    <string name="action_move_up">Monter</string>
+    <string name="action_move_down">Descendre</string>
+    <string name="favorite_moved_up" tools:ignore="PluralsCandidate">%1$s monté, position %2$d sur %3$d.</string>
+    <string name="favorite_moved_down" tools:ignore="PluralsCandidate">%1$s descendu, position %2$d sur %3$d.</string>
+    <string name="section_recent_folders">Dossiers récents</string>
+    <string name="kind_folder">dossier</string>
     <!-- %1$s : nom du fichier -->
     <string name="recent_removed">%1$s retiré de l\'historique.</string>
     <string name="recents_cleared">Historique effacé.</string>
@@ -343,4 +359,133 @@
     <string name="settings_version">XFiles, version %1$s</string>
     <string name="settings_license">Logiciel libre sous licence GNU GPL version 3.</string>
     <string name="settings_source">Code source sur GitHub</string>
+
+    <!-- Étape 11 à 13 -->
+    <string name="list_position" tools:ignore="PluralsCandidate">%1$s, %2$d sur %3$d</string>
+    <string name="action_ok">Valider</string>
+    <string name="action_retry">Réessayer</string>
+    <string name="action_duplicate">Dupliquer</string>
+    <string name="action_add_shortcut">Ajouter à l\'écran d\'accueil</string>
+    <string name="shortcut_unsupported">L\'écran d\'accueil de ce téléphone n\'accepte pas les raccourcis.</string>
+    <string name="password_title">Mot de passe</string>
+    <string name="password_message">%1$s est protégé par un mot de passe.</string>
+    <string name="password_label">Mot de passe</string>
+    <string name="password_show">Afficher le mot de passe</string>
+    <string name="password_wrong">Mot de passe incorrect. Réessayez.</string>
+    <string name="compress_title">Compresser %1$s</string>
+    <string name="compress_name_label">Nom de l\'archive</string>
+    <string name="compress_name_invalid">Ce nom n\'est pas valide.</string>
+    <string name="compress_format">Format</string>
+    <string name="compress_password_label">Mot de passe (facultatif)</string>
+    <string name="compress_no_password">Le mot de passe n\'est proposé que pour le format zip.</string>
+    <string name="format_zip">Zip, lisible partout</string>
+    <string name="format_7z">7z, plus compact</string>
+    <string name="format_tar_gz">tar.gz, pour Linux</string>
+    <string name="details_total_size">Taille totale</string>
+    <string name="details_computing">calcul en cours</string>
+    <plurals name="files_count">
+        <item quantity="one">%1$d fichier</item>
+        <item quantity="many">%1$d fichiers</item>
+        <item quantity="other">%1$d fichiers</item>
+    </plurals>
+    <plurals name="folders_count">
+        <item quantity="one">%1$d dossier</item>
+        <item quantity="many">%1$d dossiers</item>
+        <item quantity="other">%1$d dossiers</item>
+    </plurals>
+    <string name="action_compute_hashes">Calculer les empreintes MD5 et SHA-256</string>
+    <string name="hash_computing">Calcul des empreintes…</string>
+    <string name="hash_done">Empreintes calculées. Appui double sur une empreinte pour la copier.</string>
+    <string name="hash_failed">Impossible de lire le fichier.</string>
+    <string name="hash_copied">Empreinte %1$s copiée.</string>
+    <plurals name="incoming_save">
+        <item quantity="one">Fichier reçu à enregistrer : %2$s.</item>
+        <item quantity="many">%1$d fichiers reçus à enregistrer : %2$s.</item>
+        <item quantity="other">%1$d fichiers reçus à enregistrer : %2$s.</item>
+    </plurals>
+    <string name="incoming_save_here_hint">Enregistrez-les ici, ou ouvrez un autre dossier.</string>
+    <string name="incoming_save_choose_hint">Ouvrez le dossier de destination, puis Enregistrer ici.</string>
+    <string name="incoming_pick">Choisissez un fichier à envoyer à l\'application qui l\'a demandé.</string>
+    <string name="settings_section_accessibility">Accessibilité</string>
+    <string name="settings_announce_position">Annoncer la position dans les listes</string>
+    <string name="settings_announce_position_detail">Ajoute « 3 sur 12 » à la lecture de chaque élément.</string>
+    <string name="settings_sounds">Sons de confirmation</string>
+    <string name="settings_sounds_detail">Un petit son à la fin d\'une copie, d\'une extraction ou d\'un enregistrement : aigu si tout va bien, grave en cas d\'échec.</string>
+    <string name="section_categories">Catégories</string>
+    <string name="section_tools">Outils</string>
+    <string name="category_downloads">Téléchargements</string>
+    <string name="category_images">Images</string>
+    <string name="category_videos">Vidéos</string>
+    <string name="category_audio">Audio</string>
+    <string name="category_documents">Documents</string>
+    <string name="category_archives">Archives</string>
+    <string name="category_apk">Applications (APK)</string>
+    <string name="category_empty">Aucun fichier dans cette catégorie.</string>
+    <string name="storage_title">Nettoyage et analyse</string>
+    <string name="storage_row_detail">Gros fichiers, doublons, anciens téléchargements</string>
+    <string name="storage_intro">Recherche des gros fichiers, des doublons et des anciens téléchargements. Les dossiers cachés et les données des applications sont ignorés.</string>
+    <string name="storage_started">Analyse du stockage commencée. Vous pouvez quitter cet écran : elle continue.</string>
+    <string name="storage_cancelled">Analyse arrêtée.</string>
+    <plurals name="storage_scanning">
+        <item quantity="one">Analyse en cours : %1$d fichier parcouru.</item>
+        <item quantity="many">Analyse en cours : %1$d fichiers parcourus.</item>
+        <item quantity="other">Analyse en cours : %1$d fichiers parcourus.</item>
+    </plurals>
+    <plurals name="storage_comparing">
+        <item quantity="one">Recherche des doublons parmi %1$d fichier…</item>
+        <item quantity="many">Recherche des doublons parmi %1$d fichiers…</item>
+        <item quantity="other">Recherche des doublons parmi %1$d fichiers…</item>
+    </plurals>
+    <plurals name="storage_done">
+        <item quantity="one">Analyse terminée : %1$d fichier, %2$s.</item>
+        <item quantity="many">Analyse terminée : %1$d fichiers, %2$s.</item>
+        <item quantity="other">Analyse terminée : %1$d fichiers, %2$s.</item>
+    </plurals>
+    <plurals name="storage_summary">
+        <item quantity="one">%1$d fichier analysé, %2$s, %3$s.</item>
+        <item quantity="many">%1$d fichiers analysés, %2$s, %3$s.</item>
+        <item quantity="other">%1$d fichiers analysés, %2$s, %3$s.</item>
+    </plurals>
+    <string name="action_analyze">Analyser le stockage</string>
+    <string name="action_analyze_again">Relancer l\'analyse</string>
+    <string name="action_stop_analysis">Arrêter l\'analyse</string>
+    <string name="storage_section_clean">À nettoyer</string>
+    <string name="storage_section_folders">Dossiers les plus lourds</string>
+    <string name="cleanup_big">Gros fichiers</string>
+    <string name="cleanup_big_hint">50 mégaoctets ou plus</string>
+    <string name="cleanup_duplicates">Doublons</string>
+    <string name="cleanup_duplicates_hint">fichiers au contenu identique</string>
+    <string name="cleanup_downloads">Anciens téléchargements</string>
+    <string name="cleanup_downloads_hint">plus de 90 jours</string>
+    <plurals name="cleanup_files">
+        <item quantity="one">%1$d fichier, %2$s</item>
+        <item quantity="many">%1$d fichiers, %2$s</item>
+        <item quantity="other">%1$d fichiers, %2$s</item>
+    </plurals>
+    <plurals name="cleanup_groups">
+        <item quantity="one">%1$d groupe, %2$s récupérables</item>
+        <item quantity="many">%1$d groupes, %2$s récupérables</item>
+        <item quantity="other">%1$d groupes, %2$s récupérables</item>
+    </plurals>
+    <plurals name="cleanup_selected">
+        <item quantity="one">%1$d fichier coché.</item>
+        <item quantity="many">%1$d fichiers cochés.</item>
+        <item quantity="other">%1$d fichiers cochés.</item>
+    </plurals>
+    <plurals name="cleanup_selected_size">
+        <item quantity="one">%1$d fichier coché, %2$s</item>
+        <item quantity="many">%1$d fichiers cochés, %2$s</item>
+        <item quantity="other">%1$d fichiers cochés, %2$s</item>
+    </plurals>
+    <string name="cleanup_group" tools:ignore="PluralsCandidate">Groupe %1$d : %2$d copies de %3$s</string>
+    <string name="cleanup_copy" tools:ignore="PluralsCandidate">copie %1$d sur %2$d</string>
+    <string name="cleanup_oldest">la plus ancienne</string>
+    <string name="cleanup_freed">%1$s libérés.</string>
+    <string name="cleanup_no_analysis">Lancez d\'abord l\'analyse du stockage.</string>
+    <string name="cleanup_nothing">Rien à nettoyer ici.</string>
+    <string name="action_keep_oldest">Garder le plus ancien de chaque groupe</string>
+    <string name="position_only" tools:ignore="PluralsCandidate">%1$d sur %2$d</string>
+    <string name="share_target_label">Enregistrer dans XFiles</string>
+    <string name="action_save_here">Enregistrer ici</string>
+    <string name="pick_wrong_type">Ce fichier n\'est pas du type demandé.</string>
 </resources>

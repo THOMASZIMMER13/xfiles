@@ -6,7 +6,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import io.github.thomaszimmer13.xfiles.ui.components.positioned
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
@@ -111,14 +112,18 @@ fun SearchScreen(
                 }
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {
-                    items(results, key = { it.item.path }) { result ->
+                    itemsIndexed(results, key = { _, it -> it.item.path }) { index, result ->
                         val item = result.item
                         val where = result.parents.joinToString(", ")
                         ItemRow(
                             icon = itemIcon(item.name, item.isDirectory),
                             title = item.name,
                             detail = listOf(FileDescriptions.visibleDetail(item), result.parents.joinToString(" › ")).filter { it.isNotEmpty() }.joinToString(" · "),
-                            spoken = FileDescriptions.spoken(item) + if (where.isNotEmpty()) ", " + stringResource(R.string.favorite_in, where) else "",
+                            spoken = positioned(
+                                FileDescriptions.spoken(item) + if (where.isNotEmpty()) ", " + stringResource(R.string.favorite_in, where) else "",
+                                index,
+                                results.size,
+                            ),
                             clickLabel = openLabel,
                             onClick = { launcher.open(item.path, item.name, item.isDirectory) },
                             actions = buildList {

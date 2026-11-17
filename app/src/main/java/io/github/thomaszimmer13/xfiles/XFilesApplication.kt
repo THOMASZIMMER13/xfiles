@@ -3,6 +3,8 @@ package io.github.thomaszimmer13.xfiles
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
+import io.github.thomaszimmer13.xfiles.data.feedback.Feedback
+import io.github.thomaszimmer13.xfiles.data.incoming.IncomingRequests
 import io.github.thomaszimmer13.xfiles.data.prefs.PreferencesRepository
 import io.github.thomaszimmer13.xfiles.data.source.FileSource
 import io.github.thomaszimmer13.xfiles.data.source.LocalFileSource
@@ -60,5 +62,12 @@ class AppContainer(application: Application) {
     val transfer = LocalTransfer()
 
     /** Opérations longues (coller, extraire, compresser), qui survivent aux changements d'écran. */
-    val transfers = TransferManager(application, preferences, clipboard, transfer)
+    val feedback = Feedback(preferences)
+
+    /** Nettoyage et analyse du stockage ; le résultat reste disponible tant que l'app vit. */
+    val analyzer = io.github.thomaszimmer13.xfiles.data.analysis.StorageAnalyzer { volumeRepository.volumeRoots().map { it.second } }
+    val transfers = TransferManager(application, preferences, clipboard, transfer, feedback)
+
+    /** Partage vers XFiles, choix d'un fichier pour une autre app, raccourci vers un dossier. */
+    val incoming = IncomingRequests()
 }

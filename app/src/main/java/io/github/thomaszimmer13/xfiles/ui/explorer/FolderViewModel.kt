@@ -15,7 +15,10 @@ import io.github.thomaszimmer13.xfiles.domain.NameCheck
 import io.github.thomaszimmer13.xfiles.domain.NameValidator
 import io.github.thomaszimmer13.xfiles.domain.SortKey
 import io.github.thomaszimmer13.xfiles.domain.SortOptions
+import io.github.thomaszimmer13.xfiles.data.archive.CreateFormat
+import io.github.thomaszimmer13.xfiles.data.incoming.IncomingRequest
 import io.github.thomaszimmer13.xfiles.ui.components.Announcer
+import io.github.thomaszimmer13.xfiles.ui.components.PasswordGate
 import io.github.thomaszimmer13.xfiles.data.transfer.ClipContent
 import io.github.thomaszimmer13.xfiles.data.transfer.ClipItem
 import io.github.thomaszimmer13.xfiles.data.transfer.TransferMode
@@ -49,6 +52,8 @@ data class FolderUiState(
     val transfer: TransferProgress? = null,
     /** Réglage : confirmation avant de mettre à la corbeille. */
     val confirmTrash: Boolean = true,
+    /** Éléments à compresser : le dialogue « Compresser » est ouvert. */
+    val compressItems: List<FileItem>? = null,
 )
 
 sealed interface FocusRequest {
@@ -90,6 +95,8 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
     val state: StateFlow<FolderUiState> = _state.asStateFlow()
 
     val announcer = Announcer(viewModelScope)
+    val passwordGate = PasswordGate(viewModelScope)
+    private val incoming = container.incoming
 
     /** Contenu brut du dossier, avant tri. */
     private var rawItems: List<FileItem> = emptyList()
@@ -143,6 +150,7 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
         reload(path)
+        viewModelScope.launch { preferences.recordFolder(path) }
     }
 
     private fun reload(path: String) {
@@ -252,17 +260,55 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
         startOrBusy { transfers.paste(clip, dir, folderName()) }
     }
 
-    /** Extrait toute l'archive dans le dossier affiché (« Photos.zip » → dossier « Photos »). */
+    /** Extrait toute l'archive dans le dossier affiché (« Photos.zip » → dossier « Photos »), mot de passe demandé si besoin. */
     fun extractHere(item: FileItem) {
         val dir = _state.value.path ?: return
-        startOrBusy { transfers.extract(item.path, null, dir, folderName()) }
+        val folder = folderName()
+        passwordGate.run(item.path, item.name) { password ->
+            startOrBusy { transfers.extract(item.path, null, dir, folder, password) }
+        }
     }
 
+    /** Ouvre le dialogue « Compresser » pour [items]. */
     fun compress(items: List<FileItem>) {
-        val dir = _state.value.path ?: return
         if (items.isEmpty()) return
-        _state.update { it.copy(selecting = false, selected = emptySet()) }
-        startOrBusy { transfers.compress(items.map { it.path }, dir, folderName()) }
+        _state.update { it.copy(selecting = false, selected = emptySet(), compressItems = items) }
+    }
+
+    fun dismissCompress() {
+        _state.update { it.copy(compressItems = null) }
+    }
+
+    /** Nom proposé (sans extension) : celui de l'élément, ou « Archive » pour plusieurs. */
+    fun suggestedArchiveName(items: List<FileItem>): String = if (items.size == 1) {
+        val item = items[0]
+        if (item.isDirectory) item.name else item.name.substringBeforeLast('.').ifEmpty { item.name }
+    } else {
+        getApplication<Application>().getString(R.string.archive_default_name)
+    }
+
+    fun compressWith(name: String, format: CreateFormat, password: String?) {
+        val items = _state.value.compressItems ?: return
+        val dir = _state.value.path ?: return
+        _state.update { it.copy(compressItems = null) }
+        startOrBusy { transfers.compress(items.map { it.path }, dir, folderName(), format, password, name) }
+    }
+
+    /** « Dupliquer » : copie à côté de l'original (« Rapport 2.pdf »), focus sur la copie. */
+    fun duplicate(item: FileItem) {
+        val dir = _state.value.path ?: return
+        startOrBusy { transfers.duplicate(listOf(ClipItem(item.path, item.name, item.isDirectory)), dir, folderName()) }
+    }
+
+    /** Partage vers XFiles : enregistre les fichiers reçus dans le dossier affiché. */
+    fun saveIncomingHere() {
+        val request = incoming.current.value as? IncomingRequest.Save ?: return
+        val dir = _state.value.path ?: return
+        if (transfers.import(request.uris, dir, folderName())) {
+            incoming.clear()
+        } else {
+            announcer.announce(getApplication<Application>().getString(R.string.transfer_busy))
+        }
     }
 
     fun compressSelection() = compress(selectedItems())
@@ -446,6 +492,8 @@ internal fun FileOperationException.Reason.message(): Int = when (this) {
     FileOperationException.Reason.INTO_ITSELF -> R.string.op_into_itself
     FileOperationException.Reason.ENCRYPTED -> R.string.op_encrypted
     FileOperationException.Reason.BAD_ARCHIVE -> R.string.op_bad_archive
+    FileOperationException.Reason.WRONG_PASSWORD -> R.string.op_wrong_password
+    FileOperationException.Reason.UNSUPPORTED -> R.string.op_unsupported
 }
 
 /** Libellé d'un critère de tri. */

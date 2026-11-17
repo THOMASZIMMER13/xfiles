@@ -12,13 +12,13 @@ object FileDescriptions {
     fun spoken(item: FileItem, now: ZonedDateTime = ZonedDateTime.now()): String = listOfNotNull(
         item.name,
         FileTypeDescriber.describe(item.name, item.isDirectory),
-        if (item.isDirectory) item.childCount?.let(::itemCount) else SizeFormatter.spoken(item.sizeBytes),
+        if (item.isDirectory) item.childCount?.let(::itemCount) else item.sizeBytes.takeIf { it >= 0 }?.let(SizeFormatter::spoken),
         DateFormatter.spoken(item.lastModified, now),
     ).joinToString(", ")
 
     /** Ligne secondaire affichée sous le nom : « 245 ko · 3 mars ». */
     fun visibleDetail(item: FileItem): String = listOfNotNull(
-        if (item.isDirectory) item.childCount?.let(::itemCount) else SizeFormatter.short(item.sizeBytes),
+        if (item.isDirectory) item.childCount?.let(::itemCount) else item.sizeBytes.takeIf { it >= 0 }?.let(SizeFormatter::short),
         DateFormatter.short(item.lastModified),
     ).joinToString(" · ")
 

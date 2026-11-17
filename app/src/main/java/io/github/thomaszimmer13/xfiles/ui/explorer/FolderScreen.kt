@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
@@ -55,7 +55,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.thomaszimmer13.xfiles.R
 import io.github.thomaszimmer13.xfiles.a11y.FileDescriptions
-import io.github.thomaszimmer13.xfiles.data.archive.isZip
+import io.github.thomaszimmer13.xfiles.data.archive.isArchive
+import io.github.thomaszimmer13.xfiles.data.open.Shortcuts
+import io.github.thomaszimmer13.xfiles.ui.components.IncomingBanner
+import io.github.thomaszimmer13.xfiles.ui.components.PasswordGateDialog
+import io.github.thomaszimmer13.xfiles.ui.components.positioned
 import io.github.thomaszimmer13.xfiles.data.open.FileOpener
 import io.github.thomaszimmer13.xfiles.data.source.FileItem
 import io.github.thomaszimmer13.xfiles.data.transfer.ClipContent
@@ -109,6 +113,8 @@ fun FolderScreen(
     val pathCopiedMessage = stringResource(R.string.path_copied)
     val pathLabel = stringResource(R.string.details_path)
     val foldersNotSharedMessage = stringResource(R.string.selection_share_folders)
+    val shortcutUnsupported = stringResource(R.string.shortcut_unsupported)
+    val passwordRequest by viewModel.passwordGate.request.collectAsStateWithLifecycle()
 
     val actions = FileRowActions(
         open = { item -> launcher.open(item.path, item.name, item.isDirectory) },
@@ -116,6 +122,10 @@ fun FolderScreen(
         share = { item -> launcher.share(item.path, item.name) },
         extract = { item -> withNotifications { viewModel.extractHere(item) } },
         compress = { item -> withNotifications { viewModel.compress(listOf(item)) } },
+        duplicate = { item -> withNotifications { viewModel.duplicate(item) } },
+        addShortcut = { item ->
+            if (!Shortcuts.pinFolder(context, item.path, item.name)) viewModel.announcer.announce(shortcutUnsupported)
+        },
         rename = { item -> renamePath = item.path },
         toggleFavorite = viewModel::toggleFavorite,
         details = { item -> detailsPath = item.path },
@@ -227,6 +237,9 @@ fun FolderScreen(
             )
         }
         if (ready) Breadcrumb(state.crumbs, rootLabel, onJump)
+        if (!state.selecting && loaded && !state.error) {
+            IncomingBanner(onSaveHere = { withNotifications { viewModel.saveIncomingHere() } }, busy = state.transfer != null)
+        }
         val clip = state.clipboard
         if (clip != null && !state.selecting && loaded && !state.error) {
             ClipboardBanner(
@@ -243,9 +256,10 @@ fun FolderScreen(
                 state.error -> CenteredMessage(stringResource(R.string.folder_error))
                 state.items.isEmpty() -> CenteredMessage(stringResource(R.string.folder_empty))
                 else -> LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                    items(state.items, key = { it.path }) { item ->
+                    itemsIndexed(state.items, key = { _, it -> it.path }) { index, item ->
                         FileRow(
                             item = item,
+                            spoken = positioned(FileDescriptions.spoken(item), index, state.items.size),
                             isFavorite = item.path in state.favorites,
                             selecting = state.selecting,
                             selected = item.path in state.selected,
@@ -353,6 +367,18 @@ fun FolderScreen(
         )
     }
 
+    val compressItems = state.compressItems
+    if (compressItems != null) {
+        CompressDialog(
+            subject = if (compressItems.size == 1) compressItems[0].name else FileDescriptions.itemCount(compressItems.size),
+            suggestedName = remember(compressItems) { viewModel.suggestedArchiveName(compressItems) },
+            onConfirm = { name, format, password -> viewModel.compressWith(name, format, password) },
+            onDismiss = viewModel::dismissCompress,
+        )
+    }
+
+    PasswordGateDialog(passwordRequest, onSubmit = viewModel.passwordGate::submit, onDismiss = viewModel.passwordGate::dismiss)
+
     val detailsItem = detailsPath?.let { p -> state.items.firstOrNull { it.path == p } }
     if (detailsItem != null) {
         DetailsDialog(
@@ -382,6 +408,9 @@ private class FileRowActions(
     /** Archive zip : extraire ici. */
     val extract: (FileItem) -> Unit,
     val compress: (FileItem) -> Unit,
+    val duplicate: (FileItem) -> Unit,
+    /** Dossier : raccourci sur l'écran d'accueil. */
+    val addShortcut: (FileItem) -> Unit,
     /** Entre en mode sélection en cochant cet élément. */
     val select: (FileItem) -> Unit,
     /** Coche ou décoche (mode sélection). */
@@ -506,13 +535,13 @@ private fun Breadcrumb(crumbs: List<Crumb>, rootLabel: String, onJump: (String?)
 @Composable
 private fun FileRow(
     item: FileItem,
+    spoken: String,
     isFavorite: Boolean,
     selecting: Boolean,
     selected: Boolean,
     focusRequester: FocusRequester?,
     actions: FileRowActions,
 ) {
-    val spoken = FileDescriptions.spoken(item)
     val openLabel = stringResource(R.string.action_open)
     val openWithLabel = stringResource(R.string.action_open_with)
     val shareLabel = stringResource(R.string.action_share)
@@ -525,6 +554,8 @@ private fun FileRow(
     val extractLabel = stringResource(R.string.action_extract_here)
     val compressLabel = stringResource(R.string.action_compress)
     val moveLabel = stringResource(R.string.action_move)
+    val duplicateLabel = stringResource(R.string.action_duplicate)
+    val shortcutLabel = stringResource(R.string.action_add_shortcut)
     val checkLabel = stringResource(if (selected) R.string.toggle_unselect else R.string.toggle_select)
 
     Column {
@@ -552,11 +583,13 @@ private fun FileRow(
                         add(CustomAccessibilityAction(renameLabel) { actions.rename(item); true })
                         add(CustomAccessibilityAction(copyLabel) { actions.copy(item); true })
                         add(CustomAccessibilityAction(moveLabel) { actions.move(item); true })
-                        if (!item.isDirectory && isZip(item.name)) {
+                        add(CustomAccessibilityAction(duplicateLabel) { actions.duplicate(item); true })
+                        if (!item.isDirectory && isArchive(item.name)) {
                             add(CustomAccessibilityAction(extractLabel) { actions.extract(item); true })
                         }
                         add(CustomAccessibilityAction(compressLabel) { actions.compress(item); true })
                         add(CustomAccessibilityAction(favoriteLabel) { actions.toggleFavorite(item); true })
+                        if (item.isDirectory) add(CustomAccessibilityAction(shortcutLabel) { actions.addShortcut(item); true })
                         add(CustomAccessibilityAction(selectLabel) { actions.select(item); true })
                         add(CustomAccessibilityAction(detailsLabel) { actions.details(item); true })
                         add(CustomAccessibilityAction(trashLabel) { actions.moveToTrash(item); true })
@@ -571,7 +604,7 @@ private fun FileRow(
             } else Icon(
                 painter = painterResource(
                     when {
-                        !item.isDirectory && isZip(item.name) -> R.drawable.ic_archive
+                        !item.isDirectory && isArchive(item.name) -> R.drawable.ic_archive
                         !item.isDirectory -> R.drawable.ic_file
                         isFavorite -> R.drawable.ic_favorite
                         else -> R.drawable.ic_tab_explorer

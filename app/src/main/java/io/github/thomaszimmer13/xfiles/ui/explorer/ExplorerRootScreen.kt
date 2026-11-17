@@ -43,7 +43,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.thomaszimmer13.xfiles.R
 import io.github.thomaszimmer13.xfiles.a11y.FileDescriptions
 import io.github.thomaszimmer13.xfiles.a11y.SizeFormatter
+import io.github.thomaszimmer13.xfiles.data.media.Categories
+import io.github.thomaszimmer13.xfiles.data.media.Category
 import io.github.thomaszimmer13.xfiles.data.volumes.LocationKind
+import io.github.thomaszimmer13.xfiles.ui.components.IncomingBanner
+import io.github.thomaszimmer13.xfiles.ui.storage.categoryLabel
 import io.github.thomaszimmer13.xfiles.data.volumes.StorageLocation
 import io.github.thomaszimmer13.xfiles.ui.browser.Routes
 import io.github.thomaszimmer13.xfiles.ui.components.FocusOnceEffect
@@ -69,29 +73,45 @@ fun ExplorerRootScreen(
     // L'espace libre et l'existence des favoris ont pu changer pendant que l'app était en arrière-plan.
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refresh() }
 
-    // Indices dans la liste : 0 = titre « Sur l'appareil », puis les volumes, la corbeille,
-    // puis le titre « Favoris » et les favoris.
-    val trashIndex = 1 + state.locations.size
-    val favoritesStart = trashIndex + 2
+    // Clés des lignes dans l'ordre de la liste, pour retrouver la ligne à reprendre au retour.
+    val downloads = remember { Categories.downloadsDir().path }
+    val keys = buildList {
+        add("header-device")
+        state.locations.forEach { add("loc:" + it.path) }
+        add("trash")
+        if (state.favorites.isNotEmpty()) {
+            add("header-favorites")
+            state.favorites.forEach { add("fav:" + it.path) }
+        }
+        add("header-categories")
+        add("cat:downloads")
+        Category.entries.forEach { add("cat:" + it.name) }
+        add("header-tools")
+        add("storage")
+    }
     val listState = rememberLazyListState()
     val rowFocus = remember { FocusRequester() }
 
     // Un favori exact (ex. Documents) a priorité sur le volume qui le contient.
-    val focusIndex: Int? = focusPath?.let { target ->
-        if (target == TRASH_ROUTE) return@let trashIndex
-        state.favorites.indexOfFirst { it.path == target }.takeIf { it >= 0 }?.let { favoritesStart + it }
-            ?: state.locations.indexOfFirst { it.path == target }.takeIf { it >= 0 }?.let { 1 + it }
-            ?: state.locations.withIndex()
-                .filter { target.startsWith("${it.value.path}/") }
-                .maxByOrNull { it.value.path.length }?.let { 1 + it.index }
+    val focusKey: String? = focusPath?.let { target ->
+        when {
+            target == TRASH_ROUTE -> "trash"
+            target == Routes.STORAGE -> "storage"
+            target == downloads -> "cat:downloads"
+            else -> Category.entries.firstOrNull { Routes.category(it) == target }?.let { "cat:" + it.name }
+                ?: state.favorites.firstOrNull { it.path == target }?.let { "fav:" + it.path }
+                ?: state.locations.firstOrNull { it.path == target }?.let { "loc:" + it.path }
+                ?: state.locations.filter { target.startsWith("${it.path}/") }.maxByOrNull { it.path.length }?.let { "loc:" + it.path }
+        }
     }
 
     FocusOnceEffect(ready = focusPath != null && state.locations.isNotEmpty()) {
-        val index = focusIndex ?: return@FocusOnceEffect
+        val index = keys.indexOf(focusKey ?: return@FocusOnceEffect).takeIf { it >= 0 } ?: return@FocusOnceEffect
         listState.scrollToItem(index)
         withFrameNanos { }
         rowFocus.requestFocus()
     }
+    fun focusFor(key: String) = if (key == focusKey) rowFocus else null
 
     Column(Modifier.fillMaxSize()) {
         XFilesTopBar(
@@ -105,6 +125,7 @@ fun ExplorerRootScreen(
                 }
             },
         )
+        IncomingBanner(onSaveHere = null)
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -115,18 +136,10 @@ fun ExplorerRootScreen(
                 SectionHeader(stringResource(R.string.section_on_device))
             }
             items(state.locations, key = { "loc:" + it.path }) { location ->
-                LocationRow(
-                    location = location,
-                    focusRequester = if (focusIndex == 1 + state.locations.indexOf(location)) rowFocus else null,
-                    onOpen = onOpen,
-                )
+                LocationRow(location = location, focusRequester = focusFor("loc:" + location.path), onOpen = onOpen)
             }
             item(key = "trash") {
-                TrashRow(
-                    count = state.trashCount,
-                    focusRequester = if (focusIndex == trashIndex) rowFocus else null,
-                    onOpen = { onOpen(TRASH_ROUTE) },
-                )
+                TrashRow(count = state.trashCount, focusRequester = focusFor("trash"), onOpen = { onOpen(TRASH_ROUTE) })
             }
             if (state.favorites.isNotEmpty()) {
                 item(key = "header-favorites") {
@@ -135,11 +148,45 @@ fun ExplorerRootScreen(
                 items(state.favorites, key = { "fav:" + it.path }) { favorite ->
                     FavoriteRow(
                         favorite = favorite,
-                        focusRequester = if (focusIndex == favoritesStart + state.favorites.indexOf(favorite)) rowFocus else null,
+                        focusRequester = focusFor("fav:" + favorite.path),
                         onOpen = onOpen,
                         onRemove = viewModel::removeFavorite,
                     )
                 }
+            }
+            item(key = "header-categories") {
+                SectionHeader(stringResource(R.string.section_categories))
+            }
+            item(key = "cat:downloads") {
+                SimpleRow(
+                    icon = R.drawable.ic_tab_explorer,
+                    title = stringResource(R.string.category_downloads),
+                    detail = null,
+                    focusRequester = focusFor("cat:downloads"),
+                    onClick = { onOpen(downloads) },
+                )
+            }
+            items(Category.entries, key = { "cat:" + it.name }) { category ->
+                val count = state.categoryCounts[category]
+                SimpleRow(
+                    icon = categoryIcon(category),
+                    title = stringResource(categoryLabel(category)),
+                    detail = count?.let(FileDescriptions::itemCount),
+                    focusRequester = focusFor("cat:" + category.name),
+                    onClick = { onOpen(Routes.category(category)) },
+                )
+            }
+            item(key = "header-tools") {
+                SectionHeader(stringResource(R.string.section_tools))
+            }
+            item(key = "storage") {
+                SimpleRow(
+                    icon = R.drawable.ic_delete,
+                    title = stringResource(R.string.storage_title),
+                    detail = stringResource(R.string.storage_row_detail),
+                    focusRequester = focusFor("storage"),
+                    onClick = { onOpen(Routes.STORAGE) },
+                )
             }
         }
         // Hors de la liste pour être toujours présent, même si la liste défile.
@@ -225,6 +272,28 @@ private fun FavoriteRow(
             customActions = listOf(CustomAccessibilityAction(removeLabel) { onRemove(favorite); true })
         },
     )
+}
+
+/** Ligne simple : « Images, 1 234 éléments » ; appui double = ouvrir. */
+@Composable
+private fun SimpleRow(icon: Int, title: String, detail: String?, focusRequester: FocusRequester?, onClick: () -> Unit) {
+    val openLabel = stringResource(R.string.action_open)
+    RootRow(
+        icon = icon,
+        title = title,
+        detail = detail,
+        focusRequester = focusRequester,
+        onClick = onClick,
+        semantics = {
+            contentDescription = if (detail == null) title else "$title, $detail"
+            onClick(label = openLabel) { onClick(); true }
+        },
+    )
+}
+
+private fun categoryIcon(category: Category): Int = when (category) {
+    Category.ARCHIVES -> R.drawable.ic_archive
+    else -> R.drawable.ic_file
 }
 
 /** Ligne de la racine : un seul élément TalkBack, dont le texte et les actions sont fournis par [semantics]. */

@@ -71,7 +71,7 @@ object FileOpener {
             ?.setPrimaryClip(ClipData.newPlainText(label, text))
     }
 
-    private fun uriFor(context: Context, path: String): Uri? = try {
+    fun uriFor(context: Context, path: String): Uri? = try {
         FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(path))
     } catch (_: IllegalArgumentException) {
         null

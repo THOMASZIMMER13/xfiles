@@ -55,6 +55,14 @@ android {
     buildFeatures {
         compose = true
     }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+
+    packaging {
+        resources.excludes += setOf("META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*")
+    }
 }
 
 dependencies {
@@ -70,5 +78,17 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
+    // Archives : 7z, tar, gz, bz2, xz (Commons Compress + XZ), RAR 4 (junrar), zip chiffrés (zip4j).
+    implementation(libs.commons.compress)
+    implementation(libs.xz)
+    implementation(libs.junrar)
+    implementation(libs.zip4j)
+
     testImplementation(libs.junit)
+    // Tests d'accessibilité de l'interface sur la JVM (Robolectric) : structure lue par TalkBack.
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(libs.compose.ui.test.manifest)
 }
