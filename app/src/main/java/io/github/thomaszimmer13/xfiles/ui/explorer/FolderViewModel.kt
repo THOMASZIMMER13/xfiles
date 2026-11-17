@@ -47,6 +47,8 @@ data class FolderUiState(
     val clipboard: ClipContent? = null,
     /** Opération longue en cours (dans n'importe quel dossier). */
     val transfer: TransferProgress? = null,
+    /** Réglage : confirmation avant de mettre à la corbeille. */
+    val confirmTrash: Boolean = true,
 )
 
 sealed interface FocusRequest {
@@ -107,6 +109,9 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
             clipboard.content.collect { clip -> _state.update { it.copy(clipboard = clip) } }
         }
         viewModelScope.launch {
+            preferences.confirmTrash.collect { value -> _state.update { it.copy(confirmTrash = value) } }
+        }
+        viewModelScope.launch {
             transfers.progress.collect { p -> _state.update { it.copy(transfer = p) } }
         }
         viewModelScope.launch {
@@ -134,6 +139,7 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
                 sort = it.sort,
                 clipboard = it.clipboard,
                 transfer = it.transfer,
+                confirmTrash = it.confirmTrash,
             )
         }
         reload(path)

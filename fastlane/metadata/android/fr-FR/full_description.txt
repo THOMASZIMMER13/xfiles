@@ -1,0 +1,13 @@
+XFiles est un gestionnaire de fichiers conçu d'abord pour les personnes qui utilisent TalkBack.
+
+Chaque fichier ou dossier est un seul élément, lu dans l'ordre : nom, type, taille, date. Toutes les actions sont des actions personnalisées TalkBack. Les annonces sont courtes et le focus revient toujours à un endroit utile.
+
+Fonctions :
+• onglets Récents, Favoris et Explorer ; mémoire interne, carte SD, clé USB ;
+• créer, renommer, copier, déplacer, partager, compresser ; sélection multiple ;
+• corbeille avec restauration et purge après 30 jours ;
+• recherche par nom, sans tenir compte des majuscules ni des accents ;
+• archives zip : parcourir, ouvrir, extraire, créer ;
+• opérations longues en arrière-plan, avec notification et annulation.
+
+Logiciel libre sous licence GPL-3.0, sans publicité ni pistage. L'autorisation « Accès à tous les fichiers » est nécessaire.

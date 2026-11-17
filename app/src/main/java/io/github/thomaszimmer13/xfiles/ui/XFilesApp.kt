@@ -123,10 +123,10 @@ private fun MainTabs() {
         ) {
             tabStates.SaveableStateProvider(currentTab.name) {
                 when (currentTab) {
-                    AppTab.RECENTS -> BrowserStack(recentsReset) { open, reveal, focusPath ->
+                    AppTab.RECENTS -> BrowserStack(recentsReset, rootLabel = stringResource(R.string.breadcrumb_go_recents)) { open, reveal, focusPath ->
                         RecentsScreen(onOpen = open, onReveal = reveal, focusPath = focusPath)
                     }
-                    AppTab.FAVORITES -> BrowserStack(favoritesReset) { open, reveal, focusPath ->
+                    AppTab.FAVORITES -> BrowserStack(favoritesReset, rootLabel = stringResource(R.string.breadcrumb_go_favorites)) { open, reveal, focusPath ->
                         FavoritesScreen(onOpen = open, onReveal = reveal, focusPath = focusPath)
                     }
                     AppTab.EXPLORER -> ExplorerScreen(resetSignal = explorerReset)

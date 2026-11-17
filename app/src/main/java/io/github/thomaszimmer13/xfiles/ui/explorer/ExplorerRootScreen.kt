@@ -100,6 +100,9 @@ fun ExplorerRootScreen(
                 IconButton(onClick = { onOpen(Routes.search(null)) }) {
                     Icon(painterResource(R.drawable.ic_search), contentDescription = stringResource(R.string.search_everywhere))
                 }
+                IconButton(onClick = { onOpen(Routes.SETTINGS) }) {
+                    Icon(painterResource(R.drawable.ic_settings), contentDescription = stringResource(R.string.settings_title))
+                }
             },
         )
         LazyColumn(

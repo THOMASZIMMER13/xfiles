@@ -86,6 +86,7 @@ fun FolderScreen(
     onOpen: (String) -> Unit,
     onBack: () -> Unit,
     onJump: (String?) -> Unit,
+    rootLabel: String,
     viewModel: FolderViewModel = viewModel(),
 ) {
     LaunchedEffect(path) { viewModel.load(path) }
@@ -118,7 +119,8 @@ fun FolderScreen(
         rename = { item -> renamePath = item.path },
         toggleFavorite = viewModel::toggleFavorite,
         details = { item -> detailsPath = item.path },
-        moveToTrash = { item -> trashPath = item.path },
+        // Confirmation désactivable dans les réglages.
+        moveToTrash = { item -> if (state.confirmTrash) trashPath = item.path else viewModel.moveToTrash(item) },
         copy = { item -> viewModel.putInClipboard(listOf(item), TransferMode.COPY) },
         move = { item -> viewModel.putInClipboard(listOf(item), TransferMode.MOVE) },
         select = { item -> viewModel.startSelection(item) },
@@ -224,7 +226,7 @@ fun FolderScreen(
                 },
             )
         }
-        if (ready) Breadcrumb(state.crumbs, onJump)
+        if (ready) Breadcrumb(state.crumbs, rootLabel, onJump)
         val clip = state.clipboard
         if (clip != null && !state.selecting && loaded && !state.error) {
             ClipboardBanner(
@@ -268,7 +270,7 @@ fun FolderScreen(
                         launcher.shareMany(items.map { it.path to it.name })
                     }
                 },
-                onTrash = { confirmSelectionTrash = true },
+                onTrash = { if (state.confirmTrash) confirmSelectionTrash = true else viewModel.moveSelectionToTrash() },
             )
         }
         StatusMessage(announcement)
@@ -466,13 +468,12 @@ private fun ClipboardBanner(clip: ClipContent, busy: Boolean, onPaste: () -> Uni
  * Ses actions personnalisées remontent directement vers un dossier parent.
  */
 @Composable
-private fun Breadcrumb(crumbs: List<Crumb>, onJump: (String?) -> Unit) {
+private fun Breadcrumb(crumbs: List<Crumb>, rootLabel: String, onJump: (String?) -> Unit) {
     if (crumbs.isEmpty()) return
     val spoken = stringResource(R.string.breadcrumb_spoken, crumbs.joinToString(", ") { it.name })
     // Du parent le plus proche au plus lointain, puis la liste des emplacements.
     val targets = crumbs.dropLast(1).asReversed()
     val labels = targets.map { stringResource(R.string.breadcrumb_go_to, it.name) }
-    val rootLabel = stringResource(R.string.breadcrumb_go_root)
 
     Text(
         text = crumbs.joinToString(" › ") { it.name },

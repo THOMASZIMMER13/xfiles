@@ -17,7 +17,7 @@ android {
         targetSdk = 36
         // La CI fournit un numéro de build croissant ; 1 en local.
         versionCode = System.getenv("XFILES_VERSION_CODE")?.toIntOrNull() ?: 1
-        versionName = System.getenv("XFILES_VERSION_NAME") ?: "0.1.0-dev"
+        versionName = System.getenv("XFILES_VERSION_NAME") ?: "1.0.0-dev"
     }
 
     signingConfigs {
@@ -37,7 +37,10 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
-            isMinifyEnabled = false
+            // R8 : code et ressources inutilisés retirés, APK plus léger et plus rapide.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (releaseKeystore != null) {
                 signingConfig = signingConfigs.getByName("release")
             }

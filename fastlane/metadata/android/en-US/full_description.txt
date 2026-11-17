@@ -1,0 +1,7 @@
+XFiles is a file manager designed first for people who use the TalkBack screen reader. The interface is in French.
+
+Each file or folder is a single element, read as name, type, size, date. Every action is a TalkBack custom action. Announcements are short and focus always lands somewhere useful.
+
+Features: Recents, Favorites and Browse tabs; internal storage, SD card, USB drives; create, rename, copy, move, share, compress; multi-selection; per-volume trash with restore; name search; zip archives (browse, open, extract, create); long operations in the background with a cancellable notification.
+
+Free software under the GPL-3.0 licence, no ads, no tracking. Requires the "All files access" permission.

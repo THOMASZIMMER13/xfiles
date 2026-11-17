@@ -1,0 +1,1 @@
+Gestionnaire de fichiers pensé pour TalkBack, dans l'esprit de Fichiers d'iOS

@@ -15,6 +15,7 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
 import io.github.thomaszimmer13.xfiles.ui.explorer.FolderScreen
 import io.github.thomaszimmer13.xfiles.ui.search.SearchScreen
+import io.github.thomaszimmer13.xfiles.ui.settings.SettingsScreen
 import io.github.thomaszimmer13.xfiles.ui.trash.TrashScreen
 import io.github.thomaszimmer13.xfiles.ui.zip.ZipScreen
 import java.io.File
@@ -25,6 +26,7 @@ import java.io.File
  */
 object Routes {
     const val TRASH = "xfiles:corbeille"
+    const val SETTINGS = "xfiles:reglages"
     private const val SEARCH = "xfiles:recherche:"
     private const val ZIP = "xfiles:zip:"
 
@@ -37,12 +39,14 @@ object Routes {
     sealed interface Route {
         data class Folder(val path: String) : Route
         data object Trash : Route
+        data object Settings : Route
         data class Search(val scope: String?) : Route
         data class Zip(val path: String, val inner: String) : Route
     }
 
     fun parse(route: String): Route = when {
         route == TRASH -> Route.Trash
+        route == SETTINGS -> Route.Settings
         route.startsWith(SEARCH) -> Route.Search(route.removePrefix(SEARCH).ifEmpty { null })
         route.startsWith(ZIP) -> route.removePrefix(ZIP).let { Route.Zip(it.substringBefore('\u0000'), it.substringAfter('\u0000', "")) }
         else -> Route.Folder(route)
@@ -61,12 +65,14 @@ object Routes {
  * Pile vide = écran racine de l'onglet ; sinon, la dernière route est affichée.
  *
  * @param resetSignal incrémenté quand l'onglet déjà actif est touché à nouveau : retour à la racine.
+ * @param rootLabel action du fil d'Ariane qui revient à la racine de l'onglet (« Aller aux favoris »).
  * @param root écran racine ; reçoit `open` (ouvrir une route), `reveal` (afficher un élément dans son dossier)
  * et le chemin d'où l'on revient, pour y replacer le focus.
  */
 @Composable
 fun BrowserStack(
     resetSignal: Int,
+    rootLabel: String,
     root: @Composable (open: (String) -> Unit, reveal: (String) -> Unit, focusPath: String?) -> Unit,
 ) {
     val stack: SnapshotStateList<String> = rememberSaveable(
@@ -128,6 +134,7 @@ fun BrowserStack(
         when (val route = current?.let(Routes::parse)) {
             null -> root(::open, ::reveal, cameFrom)
             Routes.Route.Trash -> TrashScreen(onBack = ::goUp)
+            Routes.Route.Settings -> SettingsScreen(onBack = ::goUp)
             is Routes.Route.Search -> SearchScreen(scope = route.scope, onOpen = ::open, onReveal = ::reveal, onBack = ::goUp)
             is Routes.Route.Zip -> ZipScreen(
                 zipPath = route.path,
@@ -142,6 +149,7 @@ fun BrowserStack(
                 onOpen = ::open,
                 onBack = ::goUp,
                 onJump = ::jumpTo,
+                rootLabel = rootLabel,
             )
         }
     }

@@ -24,6 +24,18 @@ class PreferencesRepository(private val context: Context) {
         val FAVORITE_FOLDERS = stringPreferencesKey("favorite_folders")
         /** Fichiers ouverts depuis XFiles : « chemin<TAB>date » par ligne, le plus récent d'abord. */
         val RECENT_FILES = stringPreferencesKey("recent_files")
+        val CONFIRM_TRASH = booleanPreferencesKey("confirm_trash")
+    }
+
+    /** Demander confirmation avant de mettre à la corbeille (activé par défaut). */
+    val confirmTrash: Flow<Boolean> = context.dataStore.data.map { it[Keys.CONFIRM_TRASH] ?: true }.distinctUntilChanged()
+
+    suspend fun setConfirmTrash(value: Boolean) {
+        context.dataStore.edit { it[Keys.CONFIRM_TRASH] = value }
+    }
+
+    suspend fun setShowHidden(value: Boolean) {
+        context.dataStore.edit { it[Keys.SHOW_HIDDEN] = value }
     }
 
     /** Fichier ouvert récemment depuis XFiles. */

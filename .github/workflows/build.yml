@@ -15,8 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       XFILES_VERSION_CODE: ${{ github.run_number }}
-      # Sur un tag v1.2.3 → 1.2.3 ; sinon 0.1.0-<sha court>
-      XFILES_VERSION_NAME: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('0.1.0-{0}', github.sha) }}
+      # Sur un tag v1.2.3 → 1.2.3 ; sinon dev-<sha court>
+      XFILES_VERSION_NAME: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('dev-{0}', github.sha) }}
 
     steps:
       - uses: actions/checkout@v5
@@ -32,7 +32,7 @@ jobs:
         run: |
           name="$XFILES_VERSION_NAME"
           name="${name#v}"           # v1.2.3 → 1.2.3
-          case "$name" in 0.1.0-*) name="0.1.0-${GITHUB_SHA::7}";; esac
+          case "$name" in dev-*) name="dev-${GITHUB_SHA::7}";; esac
           echo "XFILES_VERSION_NAME=$name" >> "$GITHUB_ENV"
           echo "Version : $name (code $XFILES_VERSION_CODE)"
 
@@ -77,12 +77,23 @@ jobs:
           name: xfiles-release-${{ env.XFILES_VERSION_NAME }}
           path: app/build/outputs/apk/release/xfiles-*.apk
 
+      - name: Notes de version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          # Section « ## [x.y.z] » du CHANGELOG, jusqu'à la section suivante.
+          awk -v v="$XFILES_VERSION_NAME" '
+            /^## \[/ { inside = index($0, "[" v "]") > 0; next }
+            inside { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md"
+
       - name: Publication GitHub Release
         if: startsWith(github.ref, 'refs/tags/v') && steps.keystore.outputs.available == 'true'
         uses: softprops/action-gh-release@v2
         with:
+          name: XFiles ${{ env.XFILES_VERSION_NAME }}
+          body_path: ${{ runner.temp }}/notes.md
           files: app/build/outputs/apk/release/xfiles-*.apk
-          generate_release_notes: true
 
       - name: Nettoyage de la clé
         if: always()

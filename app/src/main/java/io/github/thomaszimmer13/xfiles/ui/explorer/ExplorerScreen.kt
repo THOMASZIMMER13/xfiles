@@ -1,6 +1,8 @@
 package io.github.thomaszimmer13.xfiles.ui.explorer
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.res.stringResource
+import io.github.thomaszimmer13.xfiles.R
 import io.github.thomaszimmer13.xfiles.ui.browser.BrowserStack
 import io.github.thomaszimmer13.xfiles.ui.browser.Routes
 
@@ -13,7 +15,7 @@ const val TRASH_ROUTE = Routes.TRASH
  */
 @Composable
 fun ExplorerScreen(resetSignal: Int = 0) {
-    BrowserStack(resetSignal) { open, _, focusPath ->
+    BrowserStack(resetSignal, rootLabel = stringResource(R.string.breadcrumb_go_root)) { open, _, focusPath ->
         ExplorerRootScreen(onOpen = open, focusPath = focusPath)
     }
 }

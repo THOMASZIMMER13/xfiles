@@ -7,7 +7,7 @@
     <string name="tab_favorites">Favoris</string>
     <string name="tab_explorer">Explorer</string>
 
-    <!-- Contenus provisoires -->
+    <!-- Onglets vides -->
     <string name="empty_recents">Aucun fichier récent pour le moment. Les fichiers que vous ouvrez depuis XFiles et ceux modifiés ces 7 derniers jours apparaîtront ici.</string>
     <string name="empty_favorites">Aucun favori pour le moment. Dans l\'onglet Explorer, utilisez l\'action « Ajouter aux favoris » sur un dossier ou un fichier.</string>
 
@@ -42,6 +42,8 @@
     <string name="breadcrumb_spoken">Emplacement : %1$s</string>
     <string name="breadcrumb_go_to">Aller à %1$s</string>
     <string name="breadcrumb_go_root">Aller aux emplacements</string>
+    <string name="breadcrumb_go_favorites">Aller aux favoris</string>
+    <string name="breadcrumb_go_recents">Aller aux récents</string>
 
     <!-- Favoris -->
     <string name="section_favorites">Favoris</string>
@@ -330,4 +332,15 @@
     <string name="recents_cleared">Historique effacé.</string>
     <string name="section_folders">Dossiers</string>
     <string name="section_files">Fichiers</string>
+
+    <!-- Réglages -->
+    <string name="settings_title">Réglages</string>
+    <string name="settings_section_behavior">Comportement</string>
+    <string name="settings_confirm_trash">Demander confirmation avant de mettre à la corbeille</string>
+    <string name="settings_confirm_trash_detail">Désactivé, l\'action « Mettre à la corbeille » agit tout de suite ; l\'élément reste récupérable pendant 30 jours.</string>
+    <string name="settings_section_about">À propos</string>
+    <!-- %1$s : numéro de version -->
+    <string name="settings_version">XFiles, version %1$s</string>
+    <string name="settings_license">Logiciel libre sous licence GNU GPL version 3.</string>
+    <string name="settings_source">Code source sur GitHub</string>
 </resources>
