@@ -43,6 +43,16 @@ Première version publique : un gestionnaire de fichiers pensé d'abord pour Tal
 - Dupliquer un fichier ou un dossier.
 - Récents : dossiers parcourus récemment. Favoris : « Monter » et « Descendre » pour les réordonner.
 
+### Lecteur audio et vidéo
+- Lecteur intégré, pensé pour TalkBack : position en curseur (glisser haut ou bas : 10 secondes), « Aller à… », temps jamais relu en boucle.
+- Lecture en arrière-plan, notification, écran verrouillé, casque et Bluetooth ; pause quand le casque est débranché.
+- File du dossier, lecture aléatoire, répétition, vitesse de 0,5 à 3 fois, minuteur de sommeil avec fondu, reprise de position des longs fichiers.
+- Listes de lecture m3u, m3u8 et pls (fichiers locaux et webradios), enregistrement de la file en m3u8, « Ajouter à une liste de lecture ».
+- Mini-lecteur au-dessus des onglets.
+- Vidéo : commandes toujours affichées avec TalkBack, choix de la piste audio (audiodescription signalée), sous-titres intégrés ou posés à côté (srt, vtt, ass), lecture des sous-titres par TalkBack en option, image dans l'image.
+- Décodeur FFmpeg pour les formats que le téléphone ne lit pas (AC3, E-AC3, DTS, TrueHD…).
+
 ### Réglages
 - Confirmation avant la corbeille (désactivable), fichiers cachés, informations sur la version et la licence.
 - Annoncer la position dans les listes (« 3 sur 12 »), sons de confirmation discrets (réussite, échec), tous deux désactivables.
+- Lecteur : lecteur intégré ou habituel, durées de recul et d'avance, lecture des sous-titres.

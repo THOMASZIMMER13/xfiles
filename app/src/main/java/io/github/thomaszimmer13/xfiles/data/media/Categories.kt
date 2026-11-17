@@ -68,6 +68,25 @@ object Categories {
         return result
     }
 
+    /** Listes de lecture (m3u, m3u8) connues de l'index des médias, les plus récentes d'abord. */
+    fun playlistFiles(context: Context, limit: Int = 200): List<String> {
+        val name = MediaStore.Files.FileColumns.DISPLAY_NAME
+        @Suppress("DEPRECATION")
+        val data = MediaStore.Files.FileColumns.DATA
+        val query = Bundle().apply {
+            putString(ContentResolver.QUERY_ARG_SQL_SELECTION, "($name LIKE ? OR $name LIKE ?)")
+            putStringArray(ContentResolver.QUERY_ARG_SQL_SELECTION_ARGS, arrayOf("%.m3u", "%.m3u8"))
+            putStringArray(ContentResolver.QUERY_ARG_SORT_COLUMNS, arrayOf(MediaStore.Files.FileColumns.DATE_MODIFIED))
+            putInt(ContentResolver.QUERY_ARG_SORT_DIRECTION, ContentResolver.QUERY_SORT_DIRECTION_DESCENDING)
+            putInt(ContentResolver.QUERY_ARG_LIMIT, limit)
+        }
+        val result = mutableListOf<String>()
+        context.contentResolver.query(MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL), arrayOf(data), query, null)?.use { c ->
+            while (c.moveToNext()) c.getString(0)?.takeIf(::isVisible)?.let(result::add)
+        }
+        return result
+    }
+
     /** Nombre de fichiers de [category] (fichiers cachés et corbeille exclus). */
     fun count(context: Context, category: Category): Int = paths(context, category).size
 

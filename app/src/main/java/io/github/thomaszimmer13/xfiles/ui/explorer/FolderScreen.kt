@@ -57,6 +57,9 @@ import io.github.thomaszimmer13.xfiles.R
 import io.github.thomaszimmer13.xfiles.a11y.FileDescriptions
 import io.github.thomaszimmer13.xfiles.data.archive.isArchive
 import io.github.thomaszimmer13.xfiles.data.open.Shortcuts
+import io.github.thomaszimmer13.xfiles.data.media.MediaKinds
+import io.github.thomaszimmer13.xfiles.ui.player.AddToPlaylistDialog
+import io.github.thomaszimmer13.xfiles.ui.components.itemIcon
 import io.github.thomaszimmer13.xfiles.ui.components.IncomingBanner
 import io.github.thomaszimmer13.xfiles.ui.components.PasswordGateDialog
 import io.github.thomaszimmer13.xfiles.ui.components.positioned
@@ -99,6 +102,7 @@ fun FolderScreen(
     var showSortDialog by rememberSaveable { mutableStateOf(false) }
     // Chemin de l'élément dont les détails sont affichés (null = dialogue fermé).
     var detailsPath by rememberSaveable { mutableStateOf<String?>(null) }
+    var playlistPath by rememberSaveable { mutableStateOf<String?>(null) }
     var showNewFolderDialog by rememberSaveable { mutableStateOf(false) }
     // Chemin de l'élément en cours de renommage (null = dialogue fermé).
     var renamePath by rememberSaveable { mutableStateOf<String?>(null) }
@@ -123,6 +127,8 @@ fun FolderScreen(
         extract = { item -> withNotifications { viewModel.extractHere(item) } },
         compress = { item -> withNotifications { viewModel.compress(listOf(item)) } },
         duplicate = { item -> withNotifications { viewModel.duplicate(item) } },
+        enqueue = { item -> launcher.enqueue(listOf(item.path)) },
+        addToPlaylist = { item -> playlistPath = item.path },
         addShortcut = { item ->
             if (!Shortcuts.pinFolder(context, item.path, item.name)) viewModel.announcer.announce(shortcutUnsupported)
         },
@@ -379,6 +385,23 @@ fun FolderScreen(
 
     PasswordGateDialog(passwordRequest, onSubmit = viewModel.passwordGate::submit, onDismiss = viewModel.passwordGate::dismiss)
 
+    val toPlaylist = playlistPath
+    if (toPlaylist != null) {
+        val folder = java.io.File(toPlaylist).parentFile
+        if (folder != null) {
+            AddToPlaylistDialog(
+                paths = listOf(toPlaylist),
+                folder = folder,
+                onDone = { message ->
+                    playlistPath = null
+                    viewModel.announcer.announce(message)
+                    viewModel.refreshNow()
+                },
+                onDismiss = { playlistPath = null },
+            )
+        }
+    }
+
     val detailsItem = detailsPath?.let { p -> state.items.firstOrNull { it.path == p } }
     if (detailsItem != null) {
         DetailsDialog(
@@ -409,6 +432,10 @@ private class FileRowActions(
     val extract: (FileItem) -> Unit,
     val compress: (FileItem) -> Unit,
     val duplicate: (FileItem) -> Unit,
+    /** Audio ou vidéo : ajouter à la file de lecture. */
+    val enqueue: (FileItem) -> Unit,
+    /** Audio : ajouter à une liste m3u. */
+    val addToPlaylist: (FileItem) -> Unit,
     /** Dossier : raccourci sur l'écran d'accueil. */
     val addShortcut: (FileItem) -> Unit,
     /** Entre en mode sélection en cochant cet élément. */
@@ -555,6 +582,8 @@ private fun FileRow(
     val compressLabel = stringResource(R.string.action_compress)
     val moveLabel = stringResource(R.string.action_move)
     val duplicateLabel = stringResource(R.string.action_duplicate)
+    val enqueueLabel = stringResource(R.string.player_enqueue)
+    val addPlaylistLabel = stringResource(R.string.player_add_to_playlist)
     val shortcutLabel = stringResource(R.string.action_add_shortcut)
     val checkLabel = stringResource(if (selected) R.string.toggle_unselect else R.string.toggle_select)
 
@@ -584,6 +613,12 @@ private fun FileRow(
                         add(CustomAccessibilityAction(copyLabel) { actions.copy(item); true })
                         add(CustomAccessibilityAction(moveLabel) { actions.move(item); true })
                         add(CustomAccessibilityAction(duplicateLabel) { actions.duplicate(item); true })
+                        if (!item.isDirectory && MediaKinds.isMedia(item.name)) {
+                            add(CustomAccessibilityAction(enqueueLabel) { actions.enqueue(item); true })
+                        }
+                        if (!item.isDirectory && MediaKinds.isAudio(item.name)) {
+                            add(CustomAccessibilityAction(addPlaylistLabel) { actions.addToPlaylist(item); true })
+                        }
                         if (!item.isDirectory && isArchive(item.name)) {
                             add(CustomAccessibilityAction(extractLabel) { actions.extract(item); true })
                         }
@@ -604,8 +639,7 @@ private fun FileRow(
             } else Icon(
                 painter = painterResource(
                     when {
-                        !item.isDirectory && isArchive(item.name) -> R.drawable.ic_archive
-                        !item.isDirectory -> R.drawable.ic_file
+                        !item.isDirectory -> itemIcon(item.name, false)
                         isFavorite -> R.drawable.ic_favorite
                         else -> R.drawable.ic_tab_explorer
                     },

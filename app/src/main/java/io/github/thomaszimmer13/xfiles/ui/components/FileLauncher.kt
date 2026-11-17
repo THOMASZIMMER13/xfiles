@@ -22,6 +22,8 @@ import android.content.Intent
 import io.github.thomaszimmer13.xfiles.data.archive.isArchive
 import io.github.thomaszimmer13.xfiles.data.incoming.IncomingRequest
 import io.github.thomaszimmer13.xfiles.data.incoming.IncomingRequests
+import io.github.thomaszimmer13.xfiles.data.media.MediaKinds
+import io.github.thomaszimmer13.xfiles.player.PlayerHub
 import io.github.thomaszimmer13.xfiles.data.open.FileOpener
 import io.github.thomaszimmer13.xfiles.ui.browser.Routes
 import kotlinx.coroutines.launch
@@ -38,7 +40,11 @@ class FileLauncher internal constructor(
     private val record: (String) -> Unit,
     private val texts: Texts,
     private val incoming: IncomingRequests,
+    private val player: PlayerHub,
 ) {
+    /** Ajoute des fichiers audio ou vidéo à la file de lecture. */
+    fun enqueue(paths: List<String>) = player.enqueue(paths)
+
     internal class Texts(val openWith: String, val share: String, val noApp: String, val failed: String, val wrongType: String)
 
     fun open(path: String, name: String, isDirectory: Boolean) {
@@ -50,6 +56,11 @@ class FileLauncher internal constructor(
             isArchive(name) -> {
                 record(path)
                 onRoute(Routes.zip(path))
+            }
+            // Audio, vidéo et listes m3u : lecteur intégré (sauf si désactivé dans les réglages).
+            player.handles(name) -> {
+                record(path)
+                if (MediaKinds.isPlaylist(name)) player.openPlaylist(path) else player.openFile(path)
             }
             else -> {
                 record(path)
@@ -120,6 +131,7 @@ fun rememberFileLauncher(onRoute: (String) -> Unit, onProblem: (String) -> Unit)
         val preferences = container.preferences
         FileLauncher(
             incoming = container.incoming,
+            player = container.player,
             context = context,
             onRoute = { route(it) },
             onProblem = { problem(it) },

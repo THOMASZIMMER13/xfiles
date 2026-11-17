@@ -40,6 +40,13 @@ object FileTypeDescriber {
         put("vcf", "carte de contact")
         put("ics", "calendrier")
         put("srt", "sous-titres")
+        putAll(listOf("vtt", "ass", "ssa").associateWith { "sous-titres" })
+        putAll(listOf("m3u", "m3u8", "pls").associateWith { "liste de lecture" })
+        put("m4b", "livre audio")
+        put("mkv", "vidéo MKV")
+        put("tgz", "archive TAR GZ")
+        put("xz", "archive XZ")
+        put("bz2", "archive BZ2")
     }
 
     fun describe(name: String, isDirectory: Boolean): String {

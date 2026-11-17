@@ -13,6 +13,19 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.RadioButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
+import io.github.thomaszimmer13.xfiles.data.prefs.PreferencesRepository
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -50,6 +63,24 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val announcePosition = preferences.announcePosition.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
     val feedbackSounds = preferences.feedbackSounds.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
+    val player = preferences.playerSettings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PreferencesRepository.PlayerSettings())
+
+    fun setBuiltinPlayer(value: Boolean) {
+        viewModelScope.launch { preferences.setBuiltinPlayer(value) }
+    }
+
+    fun setReadSubtitles(value: Boolean) {
+        viewModelScope.launch { preferences.setReadSubtitles(value) }
+    }
+
+    fun setSkipBack(seconds: Int) {
+        viewModelScope.launch { preferences.setSkipBack(seconds) }
+    }
+
+    fun setSkipForward(seconds: Int) {
+        viewModelScope.launch { preferences.setSkipForward(seconds) }
+    }
+
     fun setAnnouncePosition(value: Boolean) {
         viewModelScope.launch { preferences.setAnnouncePosition(value) }
     }
@@ -77,6 +108,8 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = viewModel(
     val showHidden by viewModel.showHidden.collectAsStateWithLifecycle()
     val announcePosition by viewModel.announcePosition.collectAsStateWithLifecycle()
     val feedbackSounds by viewModel.feedbackSounds.collectAsStateWithLifecycle()
+    val player by viewModel.player.collectAsStateWithLifecycle()
+    var skipDialog by remember { mutableStateOf<Boolean?>(null) }
     val context = LocalContext.current
     val version = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull().orEmpty()
@@ -115,6 +148,30 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = viewModel(
                 onChange = viewModel::setFeedbackSounds,
             )
 
+            SectionHeader(stringResource(R.string.settings_section_player))
+            SwitchRow(
+                label = stringResource(R.string.settings_builtin_player),
+                detail = stringResource(R.string.settings_builtin_player_detail),
+                checked = player.builtin,
+                onChange = viewModel::setBuiltinPlayer,
+            )
+            ChoiceRow(
+                label = stringResource(R.string.settings_skip_back),
+                value = stringResource(R.string.settings_seconds, player.skipBackSeconds),
+                onClick = { skipDialog = false },
+            )
+            ChoiceRow(
+                label = stringResource(R.string.settings_skip_forward),
+                value = stringResource(R.string.settings_seconds, player.skipForwardSeconds),
+                onClick = { skipDialog = true },
+            )
+            SwitchRow(
+                label = stringResource(R.string.settings_read_subtitles),
+                detail = stringResource(R.string.settings_read_subtitles_detail),
+                checked = player.readSubtitles,
+                onChange = viewModel::setReadSubtitles,
+            )
+
             SectionHeader(stringResource(R.string.settings_section_about))
             Text(
                 stringResource(R.string.settings_version, version),
@@ -138,6 +195,72 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = viewModel(
             }
         }
     }
+
+    when (skipDialog) {
+        false -> SkipDialog(
+            stringResource(R.string.settings_skip_back),
+            listOf(5, 10, 15, 30),
+            player.skipBackSeconds,
+            onPick = { viewModel.setSkipBack(it); skipDialog = null },
+            onDismiss = { skipDialog = null },
+        )
+        true -> SkipDialog(
+            stringResource(R.string.settings_skip_forward),
+            listOf(10, 15, 30, 60),
+            player.skipForwardSeconds,
+            onPick = { viewModel.setSkipForward(it); skipDialog = null },
+            onDismiss = { skipDialog = null },
+        )
+        null -> Unit
+    }
+}
+
+@Composable
+private fun ChoiceRow(label: String, value: String, onClick: () -> Unit) {
+    val change = stringResource(R.string.player_change)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clickable(onClick = onClick)
+            .clearAndSetSemantics {
+                contentDescription = "$label, $value"
+                onClick(label = change) { onClick(); true }
+            }
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** Choix d'une durée de saut en boutons radio. */
+@Composable
+private fun SkipDialog(title: String, choices: List<Int>, current: Int, onPick: (Int) -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, modifier = Modifier.semantics { heading() }) },
+        text = {
+            Column(Modifier.selectableGroup()) {
+                choices.forEach { seconds ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .selectable(selected = seconds == current, role = Role.RadioButton, onClick = { onPick(seconds) }),
+                    ) {
+                        RadioButton(selected = seconds == current, onClick = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.settings_seconds, seconds))
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } },
+    )
 }
 
 @Composable

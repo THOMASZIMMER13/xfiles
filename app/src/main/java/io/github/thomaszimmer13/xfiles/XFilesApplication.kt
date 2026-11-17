@@ -68,6 +68,9 @@ class AppContainer(application: Application) {
     val analyzer = io.github.thomaszimmer13.xfiles.data.analysis.StorageAnalyzer { volumeRepository.volumeRoots().map { it.second } }
     val transfers = TransferManager(application, preferences, clipboard, transfer, feedback)
 
+    /** Lecteur audio et vidéo intégré. */
+    val player = io.github.thomaszimmer13.xfiles.player.PlayerHub(application, preferences, feedback)
+
     /** Partage vers XFiles, choix d'un fichier pour une autre app, raccourci vers un dossier. */
     val incoming = IncomingRequests()
 }

@@ -3,6 +3,7 @@ package io.github.thomaszimmer13.xfiles.data.prefs
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import io.github.thomaszimmer13.xfiles.domain.SortKey
@@ -29,6 +30,52 @@ class PreferencesRepository(private val context: Context) {
         val RECENT_FOLDERS = stringPreferencesKey("recent_folders")
         val ANNOUNCE_POSITION = booleanPreferencesKey("announce_position")
         val FEEDBACK_SOUNDS = booleanPreferencesKey("feedback_sounds")
+        val BUILTIN_PLAYER = booleanPreferencesKey("builtin_player")
+        val SKIP_BACK = intPreferencesKey("skip_back_seconds")
+        val SKIP_FORWARD = intPreferencesKey("skip_forward_seconds")
+        val READ_SUBTITLES = booleanPreferencesKey("read_subtitles")
+        /** Positions de reprise : lignes « chemin\tposition ». */
+        val RESUME_POSITIONS = stringPreferencesKey("resume_positions")
+    }
+
+    /** Réglages du lecteur intégré. */
+    data class PlayerSettings(
+        val builtin: Boolean = true,
+        val skipBackSeconds: Int = 10,
+        val skipForwardSeconds: Int = 30,
+        val readSubtitles: Boolean = false,
+    )
+
+    val playerSettings: Flow<PlayerSettings> = context.dataStore.data.map {
+        PlayerSettings(
+            builtin = it[Keys.BUILTIN_PLAYER] ?: true,
+            skipBackSeconds = it[Keys.SKIP_BACK] ?: 10,
+            skipForwardSeconds = it[Keys.SKIP_FORWARD] ?: 30,
+            readSubtitles = it[Keys.READ_SUBTITLES] ?: false,
+        )
+    }.distinctUntilChanged()
+
+    suspend fun setBuiltinPlayer(value: Boolean) = context.dataStore.edit { it[Keys.BUILTIN_PLAYER] = value }.let { }
+    suspend fun setSkipBack(seconds: Int) = context.dataStore.edit { it[Keys.SKIP_BACK] = seconds }.let { }
+    suspend fun setSkipForward(seconds: Int) = context.dataStore.edit { it[Keys.SKIP_FORWARD] = seconds }.let { }
+    suspend fun setReadSubtitles(value: Boolean) = context.dataStore.edit { it[Keys.READ_SUBTITLES] = value }.let { }
+
+    /** Position où reprendre [path] (millisecondes), ou null. */
+    val resumePositions: Flow<Map<String, Long>> = context.dataStore.data.map { prefs ->
+        prefs[Keys.RESUME_POSITIONS].orEmpty().lines().mapNotNull { line ->
+            val path = line.substringBefore('\t', "")
+            val pos = line.substringAfter('\t', "").toLongOrNull()
+            if (path.isEmpty() || pos == null) null else path to pos
+        }.toMap()
+    }.distinctUntilChanged()
+
+    /** Mémorise (ou oublie, si [positionMs] est null) la position de reprise de [path]. */
+    suspend fun setResumePosition(path: String, positionMs: Long?) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[Keys.RESUME_POSITIONS].orEmpty().lines().filter { it.isNotEmpty() && it.substringBefore('\t') != path }
+            val updated = (if (positionMs != null) listOf("$path\t$positionMs") else emptyList()) + current
+            prefs[Keys.RESUME_POSITIONS] = updated.take(MAX_RESUME).joinToString("\n")
+        }
     }
 
     /** Ajouter « 3 sur 12 » à la lecture de chaque élément de liste (activé par défaut). */
@@ -184,5 +231,6 @@ class PreferencesRepository(private val context: Context) {
     private companion object {
         const val MAX_RECENTS = 50
         const val MAX_RECENT_FOLDERS = 20
+        const val MAX_RESUME = 100
     }
 }

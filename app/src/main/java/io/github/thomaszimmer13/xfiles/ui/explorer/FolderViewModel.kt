@@ -169,6 +169,12 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /** Relit le dossier affiché sans perdre le focus (après l'ajout d'un fichier, par exemple). */
+    fun refreshNow() {
+        val path = _state.value.path ?: return
+        viewModelScope.launch { runCatching { refreshQuietly(path) } }
+    }
+
     /** Contenu relu sans passer par l'état « Chargement… », pour ne pas faire perdre le focus. */
     private suspend fun refreshQuietly(path: String) {
         rawItems = fileSource.list(path, includeHidden = _state.value.sort.showHidden)

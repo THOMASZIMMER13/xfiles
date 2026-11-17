@@ -1,8 +1,18 @@
 package io.github.thomaszimmer13.xfiles
 
+import android.app.PictureInPictureParams
 import android.content.Intent
+import android.content.res.Configuration
+import android.util.Rational
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -10,6 +20,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.core.content.IntentCompat
 import io.github.thomaszimmer13.xfiles.data.incoming.IncomingRequest
 import io.github.thomaszimmer13.xfiles.data.open.Shortcuts
+import io.github.thomaszimmer13.xfiles.player.PlaybackService
 import io.github.thomaszimmer13.xfiles.ui.XFilesApp
 import io.github.thomaszimmer13.xfiles.ui.theme.XFilesTheme
 
@@ -22,6 +33,17 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         // Après une rotation, la demande en cours est déjà connue : on ne la relit pas.
         if (savedInstanceState == null) handle(intent) else ownsRequest = savedInstanceState.getBoolean(KEY_OWNS, false)
+        // Android 12 et plus : passage automatique en image dans l'image pendant une vidéo.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val hub = (application as XFilesApplication).container.player
+            lifecycleScope.launch {
+                repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    combine(hub.state, hub.screenOpen) { s, open -> s.isVideo && s.isPlaying && open }
+                        .distinctUntilChanged()
+                        .collect { runCatching { setPictureInPictureParams(pipParams()) } }
+                }
+            }
+        }
         setContent {
             XFilesTheme {
                 XFilesApp()
@@ -38,6 +60,37 @@ class MainActivity : ComponentActivity() {
         // Fermée sans avoir choisi : l'Explorer ne doit pas rester en mode « choisir un fichier ».
         if (isFinishing && ownsRequest) (application as XFilesApplication).container.incoming.clear()
         super.onDestroy()
+    }
+
+    /** Une vidéo est-elle en lecture, lecteur ouvert ? (image dans l'image possible) */
+    private fun videoPlaying(): Boolean {
+        val hub = (application as XFilesApplication).container.player
+        val state = hub.state.value
+        return state.isVideo && state.isPlaying && hub.screenOpen.value
+    }
+
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+    private fun pipParams(): PictureInPictureParams {
+        val size = (application as XFilesApplication).container.player.player?.videoSize
+        return PictureInPictureParams.Builder().apply {
+            if (size != null && size.width > 0 && size.height > 0) {
+                val ratio = Rational((size.width * size.pixelWidthHeightRatio).toInt(), size.height)
+                // Android refuse les formats trop étirés.
+                if (ratio.toFloat() in 0.42f..2.39f) setAspectRatio(ratio)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) setAutoEnterEnabled(videoPlaying())
+        }.build()
+    }
+
+    /** On quitte l'app pendant une vidéo : elle continue en image dans l'image (Android 11). */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S && videoPlaying()) runCatching { enterPictureInPictureMode(pipParams()) }
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        (application as XFilesApplication).container.player.setPictureInPicture(isInPictureInPictureMode)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -58,6 +111,10 @@ class MainActivity : ComponentActivity() {
                 listOfNotNull(intent.type) + intent.getStringArrayExtra(Intent.EXTRA_MIME_TYPES).orEmpty(),
             )
             Shortcuts.ACTION_OPEN_FOLDER -> intent.getStringExtra(Shortcuts.EXTRA_PATH)?.let { IncomingRequest.OpenFolder(it) }
+            PlaybackService.ACTION_OPEN_PLAYER -> {
+                (application as XFilesApplication).container.player.openScreen()
+                null
+            }
             else -> null
         }
         if (request != null) {

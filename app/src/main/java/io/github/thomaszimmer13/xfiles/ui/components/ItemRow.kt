@@ -84,5 +84,8 @@ fun ItemRow(
 fun itemIcon(name: String, isDirectory: Boolean): Int = when {
     isDirectory -> io.github.thomaszimmer13.xfiles.R.drawable.ic_tab_explorer
     io.github.thomaszimmer13.xfiles.data.archive.isArchive(name) -> io.github.thomaszimmer13.xfiles.R.drawable.ic_archive
+    io.github.thomaszimmer13.xfiles.data.media.MediaKinds.isVideo(name) -> io.github.thomaszimmer13.xfiles.R.drawable.ic_video
+    io.github.thomaszimmer13.xfiles.data.media.MediaKinds.isAudio(name) ||
+        io.github.thomaszimmer13.xfiles.data.media.MediaKinds.isPlaylist(name) -> io.github.thomaszimmer13.xfiles.R.drawable.ic_music
     else -> io.github.thomaszimmer13.xfiles.R.drawable.ic_file
 }

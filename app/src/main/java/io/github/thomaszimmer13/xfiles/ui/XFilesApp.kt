@@ -35,6 +35,14 @@ import io.github.thomaszimmer13.xfiles.R
 import io.github.thomaszimmer13.xfiles.XFilesApplication
 import io.github.thomaszimmer13.xfiles.data.incoming.IncomingRequest
 import io.github.thomaszimmer13.xfiles.ui.components.LocalAnnouncePosition
+import io.github.thomaszimmer13.xfiles.ui.components.StatusMessage
+import io.github.thomaszimmer13.xfiles.ui.player.MiniPlayer
+import io.github.thomaszimmer13.xfiles.ui.player.PlayerScreen
+import io.github.thomaszimmer13.xfiles.ui.player.rememberPlayerHub
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import io.github.thomaszimmer13.xfiles.data.permission.StorageAccess
 import io.github.thomaszimmer13.xfiles.ui.components.XFilesTopBar
 import io.github.thomaszimmer13.xfiles.ui.browser.BrowserStack
@@ -102,9 +110,18 @@ private fun MainTabs() {
         }
     }
 
+    val playerHub = rememberPlayerHub()
+    val playerOpen by playerHub.screenOpen.collectAsStateWithLifecycle()
+    val playerMessage by playerHub.announcer.message.collectAsStateWithLifecycle()
+
+    Box(Modifier.fillMaxSize()) {
     Scaffold(
+        // Lecteur ouvert par-dessus : les onglets restent en mémoire mais sont cachés à TalkBack.
+        modifier = if (playerOpen) Modifier.clearAndSetSemantics { } else Modifier,
         bottomBar = {
           Column {
+            // Lecture en cours : mini-lecteur au-dessus des onglets.
+            MiniPlayer(playerHub)
             // Opération en cours, annonces et conflits : visibles depuis n'importe quel onglet.
             TransferPanel()
             // collectionInfo : permet à TalkBack d'annoncer la position (« 1 sur 3 »).
@@ -166,5 +183,12 @@ private fun MainTabs() {
                 }
             }
         }
+    }
+    if (playerOpen) {
+        Surface(Modifier.fillMaxSize()) { PlayerScreen(playerHub) }
+    }
+    // Annonces du lecteur (piste suivante, fin de liste…), lues où que l'on soit.
+    // Zone d'annonce invisible à l'écran (les messages sont visibles dans le lecteur et le mini-lecteur).
+    StatusMessage(playerMessage, Modifier.size(1.dp))
     }
 }

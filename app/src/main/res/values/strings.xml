@@ -485,6 +485,127 @@
     <string name="cleanup_nothing">Rien à nettoyer ici.</string>
     <string name="action_keep_oldest">Garder le plus ancien de chaque groupe</string>
     <string name="position_only" tools:ignore="PluralsCandidate">%1$d sur %2$d</string>
+    <!-- Lecteur audio et vidéo -->
+    <string name="player_minimize">Réduire le lecteur</string>
+    <string name="player_open">ouvrir le lecteur</string>
+    <string name="player_play">Lecture</string>
+    <string name="player_pause">Pause</string>
+    <string name="player_previous">Précédent</string>
+    <string name="player_next">Suivant</string>
+    <string name="player_skip_back" tools:ignore="PluralsCandidate">Reculer de %1$d secondes</string>
+    <string name="player_skip_forward" tools:ignore="PluralsCandidate">Avancer de %1$d secondes</string>
+    <string name="player_back_10">Reculer de 10 secondes</string>
+    <string name="player_forward_10">Avancer de 10 secondes</string>
+    <string name="player_back_60">Reculer d\'une minute</string>
+    <string name="player_forward_60">Avancer d\'une minute</string>
+    <string name="player_goto">Aller à…</string>
+    <string name="player_goto_label" tools:ignore="Typos">Temps, par exemple 12:30</string>
+    <string name="player_goto_hint">Durée totale : %1$s.</string>
+    <string name="player_goto_invalid" tools:ignore="Typos">Temps non valide. Écrivez par exemple 12:30 ou 1:05:00.</string>
+    <string name="player_goto_confirm">Aller</string>
+    <string name="player_position">Position</string>
+    <string name="player_position_value" tools:ignore="PluralsCandidate">%1$s sur %2$s</string>
+    <string name="player_read_position">lire la position exacte</string>
+    <string name="player_heading_n" tools:ignore="PluralsCandidate">%1$s, piste %2$d sur %3$d</string>
+    <string name="player_track_of" tools:ignore="PluralsCandidate">piste %1$d sur %2$d</string>
+    <string name="player_now_playing">Lecture : %1$s.</string>
+    <string name="player_now_playing_n" tools:ignore="PluralsCandidate">Lecture : %1$s, piste %2$d sur %3$d.</string>
+    <string name="player_video_playing">Vidéo, en lecture</string>
+    <string name="player_video_paused">Vidéo, en pause</string>
+    <string name="player_mini_playing">En lecture</string>
+    <string name="player_mini_paused">En pause</string>
+    <string name="player_resumed_at">Reprise à %1$s.</string>
+    <string name="player_resumed_banner">Reprise à %1$s</string>
+    <string name="player_from_start">Depuis le début</string>
+    <string name="player_restarted">Lecture depuis le début.</string>
+    <string name="player_no_next">Dernière piste de la liste.</string>
+    <string name="player_ended">Fin de la liste de lecture.</string>
+    <string name="player_headphones_unplugged">Casque débranché : lecture en pause.</string>
+    <string name="player_unavailable">Le lecteur n\'a pas pu démarrer.</string>
+    <string name="player_error_format">Impossible de lire %1$s : format non pris en charge. Essayez Ouvrir avec.</string>
+    <string name="player_error_network">Impossible de lire %1$s : pas de connexion ou flux indisponible.</string>
+    <string name="player_error_missing">%1$s est introuvable.</string>
+    <string name="player_error_generic">Impossible de lire %1$s.</string>
+    <string name="player_change">changer</string>
+    <string name="player_choose">choisir</string>
+    <string name="player_speed">Vitesse</string>
+    <string name="player_speed_value">%1$s fois</string>
+    <string name="player_repeat">Répéter</string>
+    <string name="player_repeat_off">désactivé</string>
+    <string name="player_repeat_all">toute la liste</string>
+    <string name="player_repeat_one">cette piste</string>
+    <string name="player_shuffle">Lecture aléatoire</string>
+    <string name="player_sleep">Minuteur de sommeil</string>
+    <string name="player_sleep_off">désactivé</string>
+    <string name="player_sleep_end_label">à la fin de la piste</string>
+    <string name="player_sleep_remaining">%1$d min restantes</string>
+    <string name="player_sleep_end_of_track">La lecture s\'arrêtera à la fin de la piste.</string>
+    <string name="player_sleep_cancelled">Minuteur de sommeil désactivé.</string>
+    <string name="player_sleep_done">Minuteur de sommeil : lecture arrêtée.</string>
+    <string name="player_queue">Liste de lecture</string>
+    <string name="player_queue_detail" tools:ignore="PluralsCandidate">%1$d pistes</string>
+    <string name="player_queue_heading" tools:ignore="PluralsCandidate">Liste de lecture, %1$d pistes</string>
+    <string name="player_play_this">lire</string>
+    <string name="player_now">en lecture</string>
+    <string name="player_remove_from_queue">Retirer de la liste</string>
+    <string name="player_moved_up" tools:ignore="PluralsCandidate">Monté, position %1$d sur %2$d.</string>
+    <string name="player_moved_down" tools:ignore="PluralsCandidate">Descendu, position %1$d sur %2$d.</string>
+    <string name="player_removed">%1$s retiré de la liste.</string>
+    <string name="player_save_playlist">Enregistrer la liste de lecture</string>
+    <string name="player_playlist_default_name">Ma liste</string>
+    <string name="player_playlist_saved">Liste enregistrée : %1$s, dans %2$s.</string>
+    <string name="player_playlist_save_failed">Impossible d\'enregistrer la liste de lecture.</string>
+    <string name="player_playlist_unreadable">Impossible de lire la liste %1$s.</string>
+    <string name="player_playlist_empty">La liste %1$s est vide, ou ses fichiers sont introuvables.</string>
+    <string name="player_stop">Arrêter la lecture</string>
+    <string name="player_audio_tracks">Piste audio</string>
+    <string name="player_subtitles">Sous-titres</string>
+    <string name="player_subtitles_off">désactivés</string>
+    <string name="player_track_n">Piste %1$d</string>
+    <string name="player_mono">mono</string>
+    <string name="player_stereo">stéréo</string>
+    <string name="player_audio_description">audiodescription</string>
+    <string name="player_sdh">pour sourds et malentendants</string>
+    <string name="player_forced">forcés</string>
+    <string name="player_enqueue">Ajouter à la file de lecture</string>
+    <string name="player_add_to_playlist">Ajouter à une liste de lecture</string>
+    <string name="player_new_playlist">Nouvelle liste dans ce dossier</string>
+    <string name="player_no_playlists">Aucune liste de lecture trouvée.</string>
+    <string name="player_added_to_playlist" tools:ignore="PluralsCandidate">%1$d fichier ajouté à %2$s.</string>
+    <plurals name="player_playlist_loaded">
+        <item quantity="one">Liste %1$s : %2$d piste.</item>
+        <item quantity="many">Liste %1$s : %2$d pistes.</item>
+        <item quantity="other">Liste %1$s : %2$d pistes.</item>
+    </plurals>
+    <plurals name="player_playlist_missing">
+        <item quantity="one">%1$d fichier introuvable.</item>
+        <item quantity="many">%1$d fichiers introuvables.</item>
+        <item quantity="other">%1$d fichiers introuvables.</item>
+    </plurals>
+    <plurals name="player_enqueued">
+        <item quantity="one">%1$d fichier ajouté à la file de lecture.</item>
+        <item quantity="many">%1$d fichiers ajoutés à la file de lecture.</item>
+        <item quantity="other">%1$d fichiers ajoutés à la file de lecture.</item>
+    </plurals>
+    <plurals name="player_sleep_set">
+        <item quantity="one">Arrêt de la lecture dans %1$d minute.</item>
+        <item quantity="many">Arrêt de la lecture dans %1$d minutes.</item>
+        <item quantity="other">Arrêt de la lecture dans %1$d minutes.</item>
+    </plurals>
+    <plurals name="player_minutes">
+        <item quantity="one">%1$d minute</item>
+        <item quantity="many">%1$d minutes</item>
+        <item quantity="other">%1$d minutes</item>
+    </plurals>
+    <string name="settings_section_player">Lecteur</string>
+    <string name="settings_builtin_player">Lire l\'audio et la vidéo dans XFiles</string>
+    <string name="settings_builtin_player_detail">Désactivé : votre lecteur habituel s\'ouvre. Ouvrir avec reste toujours disponible.</string>
+    <string name="settings_skip_back">Reculer de</string>
+    <string name="settings_skip_forward">Avancer de</string>
+    <string name="settings_seconds" tools:ignore="PluralsCandidate">%1$d secondes</string>
+    <string name="settings_read_subtitles">Faire lire les sous-titres par TalkBack</string>
+    <string name="settings_read_subtitles_detail">Chaque sous-titre est annoncé quand il apparaît, lecteur ouvert.</string>
+    <string name="action_save">Enregistrer</string>
     <string name="share_target_label">Enregistrer dans XFiles</string>
     <string name="action_save_here">Enregistrer ici</string>
     <string name="pick_wrong_type">Ce fichier n\'est pas du type demandé.</string>

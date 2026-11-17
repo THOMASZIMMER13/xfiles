@@ -18,6 +18,9 @@ android {
         // La CI fournit un numéro de build croissant ; 1 en local.
         versionCode = System.getenv("XFILES_VERSION_CODE")?.toIntOrNull() ?: 1
         versionName = System.getenv("XFILES_VERSION_NAME") ?: "1.0.0-dev"
+        // Décodeur FFmpeg : seulement les processeurs des téléphones (ARM). Sur un émulateur x86,
+        // le lecteur fonctionne sans FFmpeg.
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     signingConfigs {
@@ -83,6 +86,13 @@ dependencies {
     implementation(libs.xz)
     implementation(libs.junrar)
     implementation(libs.zip4j)
+
+    // Lecteur audio et vidéo
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.exoplayer.hls)
+    implementation(libs.media3.session)
+    implementation(libs.media3.ui.compose)
+    implementation(libs.media3.ffmpeg.decoder)
 
     testImplementation(libs.junit)
     // Tests d'accessibilité de l'interface sur la JVM (Robolectric) : structure lue par TalkBack.
