@@ -58,4 +58,28 @@ class ExtractGuardTest {
             assertEquals(Reason.NO_SPACE, e.reason)
         }
     }
+
+    /** Bombe aux en-têtes mensongers : l'extraction s'arrête au plafond et ne laisse rien. */
+    @Test fun extractionStopsAtCeilingAndCleansUp() {
+        val root = java.nio.file.Files.createTempDirectory("bombe").toFile()
+        try {
+            val tar = File(root, "bombe.tar")
+            org.apache.commons.compress.archivers.tar.TarArchiveOutputStream(tar.outputStream()).use { t ->
+                val big = ByteArray(2 * 1024 * 1024)
+                t.putArchiveEntry(org.apache.commons.compress.archivers.tar.TarArchiveEntry("gros.bin").apply { size = big.size.toLong() })
+                t.write(big)
+                t.closeArchiveEntry()
+            }
+            val out = File(root, "cible").apply { mkdirs() }
+            try {
+                Archives.extract(tar.path, null, out, ExtractGuard(out, maxBytes = 1000, freeSpace = { Long.MAX_VALUE }))
+                fail("plafond ignoré")
+            } catch (e: FileOperationException) {
+                assertEquals(Reason.TOO_BIG, e.reason)
+            }
+            assertEquals(0, out.list()!!.size)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
 }

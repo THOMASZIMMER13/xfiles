@@ -75,6 +75,15 @@ android {
         unitTests.isIncludeAndroidResources = true
     }
 
+    // Lint obligatoire (audit M-09) : une erreur arrête la construction, les avertissements non.
+    lint {
+        abortOnError = true
+        warningsAsErrors = false
+        checkReleaseBuilds = true
+        xmlReport = true
+        htmlReport = true
+    }
+
     // Un APK par processeur (plus léger : ONNX Runtime pèse lourd) et un APK universel.
     splits {
         abi {
@@ -215,4 +224,101 @@ dependencies {
 // Les tests JVM utilisent ONNX Runtime pour PC, pas la version Android (bibliothèques natives ARM).
 configurations.matching { it.name.endsWith("UnitTestRuntimeClasspath") }.configureEach {
     exclude(group = "com.microsoft.onnxruntime", module = "onnxruntime-android")
+}
+
+// Licences des dépendances livrées dans l'APK (Lot 3) : XFiles est sous GPL-3.0, aucune dépendance
+// ne doit l'en empêcher (licence UnRAR de junrar, licences non libres…). Les licences sont lues dans
+// les POM Maven (et leurs parents) ; une licence inconnue ou refusée arrête la construction.
+val checkLicenses = tasks.register("checkLicenses") {
+    group = "verification"
+    description = "Vérifie que les dépendances de l'APK sont compatibles avec la GPL-3.0."
+    val runtime = configurations.named("releaseRuntimeClasspath")
+    val deps = dependencies
+    val report = layout.buildDirectory.file("reports/licences.txt")
+    outputs.file(report)
+    outputs.upToDateWhen { false }
+    doLast {
+        // Modules interdits quelle que soit la licence annoncée.
+        val bannedModules = listOf(Regex("(?i)junrar"), Regex("(?i)unrar"))
+        // Licences incompatibles avec la GPL-3.0 (ou non libres).
+        val denied = listOf(
+            "unrar", "proprietary", "commercial", "commons clause", "sspl", "server side public",
+            "business source", "busl", "elastic license", "non-commercial", "noncommercial",
+            "json license", "good, not evil", "eclipse public license - v 1.0", "epl-1.0",
+            "eclipse public license 1.0", "cddl", "common development and distribution",
+            "original bsd", "4-clause",
+        )
+        // Licences compatibles avec la GPL-3.0.
+        val allowed = listOf(
+            "apache", "mit", "bsd", "0bsd", "isc", "zlib", "public domain", "cc0", "unlicense",
+            "gpl", "lgpl", "gnu general public", "gnu lesser", "mozilla public license 2.0", "mpl 2.0", "mpl-2.0",
+            "bouncy castle", "eclipse public license - v 2.0", "epl-2.0", "eclipse public license v2.0",
+            "eclipse distribution license", "edl", "android software development kit license",
+            "the go license",
+        ).map { Regex("\\b" + Regex.escape(it) + "\\b") }
+        val ids = runtime.get().incoming.resolutionResult.allComponents
+            .mapNotNull { it.id as? org.gradle.api.artifacts.component.ModuleComponentIdentifier }
+            .distinctBy { it.displayName }
+
+        fun pomOf(group: String, module: String, version: String): groovy.util.Node? {
+            val id = org.gradle.internal.component.external.model.DefaultModuleComponentIdentifier.newId(
+                org.gradle.api.internal.artifacts.DefaultModuleIdentifier.newId(group, module), version,
+            )
+            // Quelques essais : un dépôt qui ne répond pas ne doit pas faire échouer le contrôle.
+            var file: File? = null
+            for (attempt in 1..3) {
+                val result = deps.createArtifactResolutionQuery()
+                    .forComponents(id)
+                    .withArtifacts(org.gradle.maven.MavenModule::class.java, org.gradle.maven.MavenPomArtifact::class.java)
+                    .execute()
+                file = result.resolvedComponents.firstOrNull()
+                    ?.getArtifacts(org.gradle.maven.MavenPomArtifact::class.java)
+                    ?.filterIsInstance<org.gradle.api.artifacts.result.ResolvedArtifactResult>()
+                    ?.firstOrNull()?.file
+                if (file != null) break
+                result.components.filterIsInstance<org.gradle.api.artifacts.result.UnresolvedComponentResult>()
+                    .forEach { logger.warn("POM $group:$module:$version (essai $attempt) : ${it.failure.message}") }
+            }
+            if (file == null) return null
+            return runCatching { groovy.xml.XmlParser(false, false).parse(file) }
+                .onFailure { logger.warn("POM illisible $group:$module:$version : ${it.message}") }.getOrNull()
+        }
+
+        fun child(node: groovy.util.Node, name: String): groovy.util.Node? =
+            node.children().filterIsInstance<groovy.util.Node>().firstOrNull { it.name().toString().substringAfter('}') == name }
+
+        fun licensesOf(group: String, module: String, version: String, depth: Int = 0): List<String> {
+            val pom = pomOf(group, module, version) ?: return emptyList()
+            val found = child(pom, "licenses")?.children()?.filterIsInstance<groovy.util.Node>()?.map { lic ->
+                listOfNotNull(child(lic, "name")?.text(), child(lic, "url")?.text()).joinToString(" ")
+            }.orEmpty()
+            if (found.isNotEmpty() || depth >= 6) return found
+            val parent = child(pom, "parent") ?: return emptyList()
+            val pg = child(parent, "groupId")?.text() ?: return emptyList()
+            val pa = child(parent, "artifactId")?.text() ?: return emptyList()
+            val pv = child(parent, "version")?.text() ?: return emptyList()
+            return licensesOf(pg, pa, pv, depth + 1)
+        }
+
+        val lines = mutableListOf<String>()
+        val problems = mutableListOf<String>()
+        for (id in ids.sortedBy { it.displayName }) {
+            val name = "${id.group}:${id.module}:${id.version}"
+            if (bannedModules.any { it.containsMatchIn(name) }) {
+                problems += "$name : module interdit (licence incompatible avec la GPL-3.0)"
+                continue
+            }
+            val licenses = licensesOf(id.group, id.module, id.version)
+            lines += "$name : ${licenses.joinToString(" | ").ifEmpty { "?" }}"
+            val text = licenses.joinToString(" ").lowercase()
+            when {
+                licenses.isEmpty() -> problems += "$name : licence introuvable dans le POM"
+                denied.any { it in text } && allowed.none { it.containsMatchIn(text) } -> problems += "$name : licence refusée ($text)"
+                allowed.none { it.containsMatchIn(text) } -> problems += "$name : licence inconnue ($text), à vérifier"
+            }
+        }
+        report.get().asFile.apply { parentFile.mkdirs(); writeText(lines.joinToString("\n") + "\n") }
+        if (problems.isNotEmpty()) throw GradleException("Licences à revoir :\n" + problems.joinToString("\n"))
+        logger.lifecycle("Licences : ${ids.size} dépendances compatibles avec la GPL-3.0.")
+    }
 }

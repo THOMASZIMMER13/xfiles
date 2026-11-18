@@ -204,7 +204,7 @@ fun TrashScreen(onBack: () -> Unit, viewModel: TrashViewModel = viewModel()) {
  * « Facture.pdf, document PDF, 245 kilooctets, supprimé hier à 9 h 05, dans Mémoire interne, Documents ».
  */
 @Composable
-private fun TrashRow(
+internal fun TrashRow(
     item: TrashItem,
     index: Int,
     count: Int,

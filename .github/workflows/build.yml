@@ -7,30 +7,44 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Moindre privilège (audit F-08) : lecture seule partout ; seul le job « release » écrit.
 permissions:
-  contents: write # nécessaire pour publier une release sur un tag
+  contents: read
+
+# Actions épinglées par SHA complet de commit (audit F-08) : un tag déplacé ne change rien ici.
+# Pour mettre à jour : remplacer le SHA et le commentaire de version ensemble.
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.name }}
+      signed: ${{ steps.keystore.outputs.available }}
     env:
       XFILES_VERSION_CODE: ${{ github.run_number }}
       # Sur un tag v1.2.3 → 1.2.3 ; sinon dev-<sha court>
       XFILES_VERSION_NAME: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('dev-{0}', github.sha) }}
-      # Google Drive : identifiant d'application « bureau » d'XFiles (variables du dépôt, facultatives).
+      # Google Drive : identifiant d'application « bureau » d'XFiles (secret du dépôt de préférence,
+      # variable acceptée pour compatibilité ; masqué dans les journaux dans les deux cas).
       XFILES_GDRIVE_CLIENT_ID: ${{ vars.XFILES_GDRIVE_CLIENT_ID }}
-      XFILES_GDRIVE_CLIENT_SECRET: ${{ vars.XFILES_GDRIVE_CLIENT_SECRET }}
+      XFILES_GDRIVE_CLIENT_SECRET: ${{ secrets.XFILES_GDRIVE_CLIENT_SECRET || vars.XFILES_GDRIVE_CLIENT_SECRET }}
 
     steps:
-      - uses: actions/checkout@v5
+      - name: Masquage des valeurs sensibles
+        run: |
+          if [ -n "$XFILES_GDRIVE_CLIENT_SECRET" ]; then echo "::add-mask::$XFILES_GDRIVE_CLIENT_SECRET"; fi
 
-      - uses: actions/setup-java@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: "21"
 
       # Pont rclone (comptes en ligne) : Go et le NDK Android pour gomobile.
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
           go-version-file: rclone/go.mod
           cache-dependency-path: rclone/go.sum
@@ -43,22 +57,43 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;29.0.14206865" > /dev/null
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
 
-      - uses: gradle/actions/setup-gradle@v5
+      - uses: gradle/actions/setup-gradle@0723195856401067f7a2779048b490ace7a47d7c # v5.0.2
 
       - name: Nom de version
+        id: version
         run: |
           name="$XFILES_VERSION_NAME"
           name="${name#v}"           # v1.2.3 → 1.2.3
           case "$name" in dev-*) name="dev-${GITHUB_SHA::7}";; esac
           echo "XFILES_VERSION_NAME=$name" >> "$GITHUB_ENV"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
           echo "Version : $name (code $XFILES_VERSION_CODE)"
+
+      - name: Actions épinglées par SHA
+        run: |
+          if grep -nE '^\s*-?\s*uses:\s*[^@]+@' .github/workflows/*.yml | grep -vE '@[0-9a-f]{40}( |$)'; then
+            echo "Action non épinglée par SHA complet." >&2; exit 1
+          fi
+
+      # Aucune dépendance incompatible avec la GPL-3.0 (licence UnRAR, non libres…).
+      - name: Licences des dépendances
+        run: ./gradlew checkLicenses --stacktrace
 
       - name: Tests du pont rclone
         working-directory: rclone
         run: ./patch.sh && go test ./...
 
-      - name: Tests et APK debug
-        run: ./gradlew testDebugUnitTest assembleDebug --stacktrace
+      # Lint obligatoire (audit M-09) : une erreur arrête la CI.
+      - name: Tests, lint et APK debug
+        run: ./gradlew testDebugUnitTest lintDebug assembleDebug --stacktrace
+
+      - name: Rapport lint
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: lint-${{ steps.version.outputs.name }}
+          path: app/build/reports/lint-results-debug.*
+          if-no-files-found: ignore
 
       - name: Clé de signature
         id: keystore
@@ -70,7 +105,8 @@ jobs:
             echo "available=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/xfiles.jks"
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/xfiles.jks"
           echo "XFILES_KEYSTORE_FILE=$RUNNER_TEMP/xfiles.jks" >> "$GITHUB_ENV"
           echo "available=true" >> "$GITHUB_OUTPUT"
 
@@ -89,37 +125,57 @@ jobs:
           mv "$out/app-armeabi-v7a-release.apk" "$out/xfiles-${XFILES_VERSION_NAME}-armv7.apk"
           mv "$out/app-x86_64-release.apk" "$out/xfiles-${XFILES_VERSION_NAME}-x86_64.apk"
 
+      # La clé est effacée quoi qu'il arrive, avant tout envoi d'artefact.
+      - name: Nettoyage de la clé
+        if: always()
+        run: rm -f "$RUNNER_TEMP/xfiles.jks"
+
       - name: Artefact debug
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
-          name: xfiles-debug-${{ env.XFILES_VERSION_NAME }}
+          name: xfiles-debug-${{ steps.version.outputs.name }}
           path: app/build/outputs/apk/debug/app-arm64-v8a-debug.apk
 
       - name: Artefact release
         if: steps.keystore.outputs.available == 'true'
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         with:
-          name: xfiles-release-${{ env.XFILES_VERSION_NAME }}
+          name: xfiles-release-${{ steps.version.outputs.name }}
           path: app/build/outputs/apk/release/xfiles-*.apk
 
+  # Publication sur un tag v* : seul job autorisé à écrire dans le dépôt.
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v') && needs.build.outputs.signed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: CHANGELOG.md
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: xfiles-release-${{ needs.build.outputs.version }}
+          path: apk
+
       - name: Notes de version
-        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
         run: |
           # Section « ## [x.y.z] » du CHANGELOG, jusqu'à la section suivante.
-          awk -v v="$XFILES_VERSION_NAME" '
+          awk -v v="$VERSION" '
             /^## \[/ { inside = index($0, "[" v "]") > 0; next }
             inside { print }
           ' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
           cat "$RUNNER_TEMP/notes.md"
 
       - name: Publication GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v') && steps.keystore.outputs.available == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
-          name: XFiles ${{ env.XFILES_VERSION_NAME }}
+          name: XFiles ${{ needs.build.outputs.version }}
           body_path: ${{ runner.temp }}/notes.md
-          files: app/build/outputs/apk/release/xfiles-*.apk
-
-      - name: Nettoyage de la clé
-        if: always()
-        run: rm -f "$RUNNER_TEMP/xfiles.jks"
+          files: apk/xfiles-*.apk

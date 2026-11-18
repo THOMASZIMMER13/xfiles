@@ -318,7 +318,7 @@ private fun routeLabel(route: String?, container: io.github.thomaszimmer13.xfile
  * action « Fermer l'onglet » ; puis le bouton « Nouvel onglet ».
  */
 @Composable
-private fun TabStrip(ids: List<Int>, current: Int, label: (Int) -> String, onSelect: (Int) -> Unit, onClose: (Int) -> Unit, onNew: () -> Unit) {
+internal fun TabStrip(ids: List<Int>, current: Int, label: (Int) -> String, onSelect: (Int) -> Unit, onClose: (Int) -> Unit, onNew: () -> Unit) {
     val closeLabel = stringResource(R.string.tab_close)
     Column {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {

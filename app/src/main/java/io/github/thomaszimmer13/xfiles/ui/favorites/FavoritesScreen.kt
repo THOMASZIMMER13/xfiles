@@ -205,7 +205,7 @@ fun FavoritesScreen(
 }
 
 @Composable
-private fun FavoriteRow(
+internal fun FavoriteRow(
     fav: Favorite,
     index: Int,
     count: Int,

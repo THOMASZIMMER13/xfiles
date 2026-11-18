@@ -30,6 +30,25 @@ class RemoteNameSafetyTest {
         listOf("Facture.pdf", ".cache", "a\\b", "Été 2026", "..txt", "...").forEach { assertEquals(it, RemoteClient.safeName(it)) }
     }
 
+    /** Noms encodés (WebDAV décode les href) et séparateurs Windows. */
+    @Test fun encodedTraversalIsRefusedAfterDecoding() {
+        for (encoded in listOf("%2e%2e%2f", "%2E%2E", "..%2fsecret", "%2e%2e%5c..%2f", "a%2fb", "%00")) {
+            val decoded = java.net.URLDecoder.decode(encoded, "UTF-8")
+            val name = RemoteClient.safeName(decoded)
+            if (name != null) {
+                // Seuls restent les noms sans « / » : la barre oblique inverse est un caractère comme un autre.
+                assertFalse(decoded, "/" in name || name == "..")
+            }
+        }
+        assertNull(RemoteClient.safeName(java.net.URLDecoder.decode("%2e%2e%2f", "UTF-8")))
+        assertNull(RemoteClient.safeName(java.net.URLDecoder.decode("a%2fb", "UTF-8")))
+        // Non décodé, « %2e%2e%2f » n'est qu'un nom bizarre, qui reste dans le dossier.
+        val root = File(tmp.root, "remote/srv").apply { mkdirs() }
+        assertTrue(RemoteClient.inside(root, File(root, RemoteClient.safeName("%2e%2e%2f")!!)))
+        // « ..\x » : sous Android, « \ » n'est pas un séparateur ; le fichier reste dans le dossier.
+        assertTrue(RemoteClient.inside(root, File(root, RemoteClient.safeName("..\\x")!!)))
+    }
+
     @Test fun insideRejectsEscapesAndSiblingPrefixes() {
         val root = File(tmp.root, "remote/srv").apply { mkdirs() }
         assertTrue(RemoteClient.inside(root, File(root, "Photos/a.jpg")))

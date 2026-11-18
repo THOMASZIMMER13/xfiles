@@ -171,13 +171,7 @@ class Vaults(
     }
 
     /** Chiffrement à autoriser par l'empreinte, pour sceller le mot de passe. */
-    fun sealCipher(id: String): Cipher = try {
-        encryptCipher(id)
-    } catch (_: android.security.keystore.KeyPermanentlyInvalidatedException) {
-        // Empreintes ajoutées ou retirées : la clé est morte pour toujours ; on en crée une neuve (M-03).
-        deleteBioKey(id)
-        encryptCipher(id)
-    }
+    fun sealCipher(id: String): Cipher = freshAfterInvalidation({ encryptCipher(id) }, { deleteBioKey(id) })
 
     private fun encryptCipher(id: String): Cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, bioKey(id)) }
 
@@ -208,6 +202,17 @@ class Vaults(
         const val ID_PREFIX = "vault-"
         const val FOLDER = "Coffres XFiles"
         private const val WITNESS_NAME = ".xfiles-coffre"
+
+        /**
+         * Empreintes ajoutées ou retirées : la clé du téléphone est morte pour toujours ; on l'efface
+         * ([reset]) et on en crée une neuve, une seule fois (M-03).
+         */
+        internal fun <T> freshAfterInvalidation(create: () -> T, reset: () -> Unit): T = try {
+            create()
+        } catch (_: android.security.keystore.KeyPermanentlyInvalidatedException) {
+            reset()
+            create()
+        }
 
         /** Erreur de lecture du témoin due à la clé : nom chiffré introuvable, ou bloc indéchiffrable. */
         internal fun wrongPassword(e: RemoteException): Boolean {

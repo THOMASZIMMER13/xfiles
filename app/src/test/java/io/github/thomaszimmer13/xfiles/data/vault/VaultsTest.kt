@@ -31,4 +31,25 @@ class VaultsTest {
         org.junit.Assert.assertFalse(Vaults.wrongPassword(e(r.getValue("UNREACHABLE"))))
         org.junit.Assert.assertFalse(Vaults.wrongPassword(e(r.getValue("AUTH"))))
     }
+
+    /** Audit M-03 : clé invalidée par un changement d'empreintes, effacée puis recréée une fois. */
+    @Test fun invalidatedKeyIsRecreatedOnce() {
+        var attempts = 0
+        var resets = 0
+        val value = Vaults.freshAfterInvalidation({
+            attempts++
+            if (attempts == 1) throw android.security.keystore.KeyPermanentlyInvalidatedException()
+            "chiffreur"
+        }, { resets++ })
+        assertEquals("chiffreur", value)
+        assertEquals(2, attempts)
+        assertEquals(1, resets)
+        // Une clé neuve encore refusée : l'erreur remonte, pas de boucle.
+        try {
+            Vaults.freshAfterInvalidation<String>({ throw android.security.keystore.KeyPermanentlyInvalidatedException() }, { resets++ })
+            org.junit.Assert.fail("pas d'erreur")
+        } catch (_: android.security.keystore.KeyPermanentlyInvalidatedException) {
+        }
+        assertEquals(2, resets)
+    }
 }

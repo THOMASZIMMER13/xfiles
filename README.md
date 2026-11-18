@@ -66,6 +66,15 @@ reprises de la section `## [X.Y.Z]` du CHANGELOG.
 | `XFILES_KEYSTORE_PASSWORD` | Mot de passe du keystore |
 | `XFILES_KEY_ALIAS` | Alias de la clé |
 | `XFILES_KEY_PASSWORD` | Mot de passe de la clé |
+| `XFILES_GDRIVE_CLIENT_SECRET` | Secret de l'identifiant Google Drive (facultatif ; une variable du même nom reste acceptée) |
+
+Garde-fous de la CI : actions épinglées par SHA de commit, droits en lecture seule sauf pour le job
+de publication, clé de signature effacée en fin de job, **lint obligatoire** (une erreur arrête la
+construction) et **contrôle des licences** (`./gradlew checkLicenses`, rapport dans
+`app/build/reports/licences.txt`) : toute dépendance sous licence incompatible avec la GPL-3.0,
+comme la licence UnRAR, fait échouer la construction.
+
+Avant chaque version : [protocole de recette sur téléphone](docs/RECETTE.md), avec TalkBack.
 
 **Sauvegardez la clé** : sans elle, les mises à jour ne s'installeront plus par-dessus l'app existante.
 

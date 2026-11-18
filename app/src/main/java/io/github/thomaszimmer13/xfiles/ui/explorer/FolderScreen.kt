@@ -193,7 +193,9 @@ fun FolderScreen(
 
     // Après une création, un renommage ou une suppression : focus sur l'élément concerné.
     val focusRequest = state.focusRequest
-    val focusRequestPath = (focusRequest as? FocusRequest.Item)?.path
+    // Ligne qui porte itemFocus : gardée une fois la demande traitée, sans quoi l'élément cesserait
+    // d'être focalisable et perdrait le focus aussitôt.
+    var focusedPath by remember(path) { mutableStateOf(focusTarget) }
     LaunchedEffect(focusRequest, state.items) {
         when (focusRequest) {
             null -> return@LaunchedEffect
@@ -204,7 +206,9 @@ fun FolderScreen(
             is FocusRequest.Item -> {
                 val index = state.items.indexOfFirst { it.path == focusRequest.path }
                 if (index < 0) return@LaunchedEffect
+                focusedPath = focusRequest.path
                 listState.scrollToItem(index)
+                withFrameNanos { }
                 withFrameNanos { }
                 runCatching { itemFocus.requestFocus() }
             }
@@ -289,7 +293,7 @@ fun FolderScreen(
                             isFavorite = item.path in state.favorites,
                             selecting = state.selecting,
                             selected = item.path in state.selected,
-                            focusRequester = if (item.path == (focusRequestPath ?: focusTarget)) itemFocus else null,
+                            focusRequester = if (item.path == focusedPath) itemFocus else null,
                             actions = actions,
                         )
                     }
