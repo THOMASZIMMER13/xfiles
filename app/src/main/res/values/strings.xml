@@ -778,4 +778,60 @@
     </plurals>
     <string name="scan_save">Enregistrer le PDF</string>
     <string name="scan_discard">Abandonner</string>
+    <!-- Renommage par lot -->
+    <plurals name="rename_title">
+        <item quantity="one">Renommer %1$d élément</item>
+        <item quantity="many">Renommer %1$d éléments</item>
+        <item quantity="other">Renommer %1$d éléments</item>
+    </plurals>
+    <string name="rename_mode_replace">Rechercher et remplacer</string>
+    <string name="rename_mode_template">Modèle (numéro, date…)</string>
+    <string name="rename_find">Rechercher</string>
+    <string name="rename_replace">Remplacer par</string>
+    <string name="rename_regex">Expression régulière</string>
+    <string name="rename_ignore_case">Ignorer majuscules et minuscules</string>
+    <string name="rename_template">Modèle du nouveau nom</string>
+    <string name="rename_template_help">Balises : {nom} nom actuel, {n} numéro, {date} date du fichier, {ext} extension. Exemple : Vacances {n}</string>
+    <string name="rename_start">Premier numéro</string>
+    <string name="rename_digits">Nombre de chiffres</string>
+    <string name="rename_digits_help">Vide : automatique (01 à 12).</string>
+    <string name="rename_case">Majuscules et minuscules</string>
+    <string name="rename_case_none">Inchangées</string>
+    <string name="rename_case_lower">tout en minuscules</string>
+    <string name="rename_case_upper">TOUT EN MAJUSCULES</string>
+    <string name="rename_case_words">Première Lettre Des Mots</string>
+    <string name="rename_case_sentence">Première lettre seulement</string>
+    <string name="rename_include_extension">Modifier aussi l\'extension</string>
+    <string name="rename_preview">Aperçu</string>
+    <plurals name="rename_summary_renamed">
+        <item quantity="one">%1$d sera renommé</item>
+        <item quantity="many">%1$d seront renommés</item>
+        <item quantity="other">%1$d seront renommés</item>
+    </plurals>
+    <plurals name="rename_summary_problems">
+        <item quantity="one">%1$d en conflit</item>
+        <item quantity="many">%1$d en conflit</item>
+        <item quantity="other">%1$d en conflit</item>
+    </plurals>
+    <string name="rename_bad_pattern">Expression régulière incorrecte.</string>
+    <string name="rename_line_renamed">%1$s devient %2$s</string>
+    <string name="rename_line_unchanged">%1$s, inchangé</string>
+    <string name="rename_line_duplicate">%1$s : conflit, %2$s serait donné à plusieurs éléments</string>
+    <string name="rename_line_exists">%1$s : conflit, %2$s existe déjà dans le dossier</string>
+    <string name="rename_line_invalid">%1$s : nom impossible, « %2$s »</string>
+    <plurals name="rename_apply">
+        <item quantity="one">Renommer %1$d élément</item>
+        <item quantity="many">Renommer %1$d éléments</item>
+        <item quantity="other">Renommer %1$d éléments</item>
+    </plurals>
+    <string name="rename_fix_conflicts">Corrigez d\'abord les conflits</string>
+    <plurals name="rename_done">
+        <item quantity="one">%1$d élément renommé.</item>
+        <item quantity="many">%1$d éléments renommés.</item>
+        <item quantity="other">%1$d éléments renommés.</item>
+    </plurals>
+    <string name="rename_finished">Terminé</string>
+    <string name="rename_undo">Annuler le renommage</string>
+    <string name="rename_undone">Renommage annulé : les anciens noms sont revenus.</string>
+    <string name="rename_failed">Le renommage a échoué (%1$s). Rien n\'a été changé.</string>
 </resources>

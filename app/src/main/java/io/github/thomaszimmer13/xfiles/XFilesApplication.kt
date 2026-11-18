@@ -74,6 +74,9 @@ class AppContainer(application: Application) {
     /** Reconnaissance de texte (images, PDF scannés, scanner). */
     val ocr = io.github.thomaszimmer13.xfiles.data.ocr.OcrService(application, kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default))
 
+    /** Éléments choisis pour le renommage par lot. */
+    val pendingRename = io.github.thomaszimmer13.xfiles.ui.rename.PendingRename()
+
     /** Partage vers XFiles, choix d'un fichier pour une autre app, raccourci vers un dossier. */
     val incoming = IncomingRequests()
 }

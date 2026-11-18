@@ -296,6 +296,7 @@ fun FolderScreen(
                 onCopy = { viewModel.putSelectionInClipboard(TransferMode.COPY) },
                 onMove = { viewModel.putSelectionInClipboard(TransferMode.MOVE) },
                 onCompress = { withNotifications { viewModel.compressSelection() } },
+                onRename = { onOpen(Routes.batchRename(viewModel.prepareBatchRename())) },
                 onShare = {
                     val items = viewModel.selectedItems()
                     if (items.any { it.isDirectory }) {
@@ -475,13 +476,14 @@ private class FileRowActions(
     val toggle: (FileItem) -> Unit,
 )
 
-/** Actions sur la sélection, en bas de l'écran (lues après la liste) : Copier, Déplacer, Partager, Compresser, Corbeille. */
+/** Actions sur la sélection, en bas de l'écran (lues après la liste) : Copier, Déplacer, Renommer, Partager, Compresser, Corbeille. */
 @Composable
 private fun SelectionBar(
     enabled: Boolean,
     onCopy: () -> Unit,
     onMove: () -> Unit,
     onCompress: () -> Unit,
+    onRename: () -> Unit,
     onShare: () -> Unit,
     onTrash: () -> Unit,
 ) {
@@ -490,6 +492,7 @@ private fun SelectionBar(
         Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
             ToolButton(R.drawable.ic_copy, stringResource(R.string.action_copy), enabled, onCopy)
             ToolButton(R.drawable.ic_move, stringResource(R.string.action_move), enabled, onMove)
+            ToolButton(R.drawable.ic_edit, stringResource(R.string.action_rename), enabled, onRename)
             ToolButton(R.drawable.ic_share, stringResource(R.string.action_share), enabled, onShare)
             ToolButton(R.drawable.ic_archive, stringResource(R.string.action_compress), enabled, onCompress)
             ToolButton(R.drawable.ic_delete, stringResource(R.string.action_trash_short), enabled, onTrash)

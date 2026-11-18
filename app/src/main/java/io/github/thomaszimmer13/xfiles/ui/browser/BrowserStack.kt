@@ -17,6 +17,7 @@ import io.github.thomaszimmer13.xfiles.data.media.Category
 import io.github.thomaszimmer13.xfiles.ui.document.DocumentScreen
 import io.github.thomaszimmer13.xfiles.ui.document.EditorScreen
 import io.github.thomaszimmer13.xfiles.ui.scanner.ScannerScreen
+import io.github.thomaszimmer13.xfiles.ui.rename.BatchRenameScreen
 import io.github.thomaszimmer13.xfiles.ui.explorer.FolderScreen
 import io.github.thomaszimmer13.xfiles.ui.storage.CategoryScreen
 import io.github.thomaszimmer13.xfiles.ui.storage.CleanupKind
@@ -44,6 +45,10 @@ object Routes {
     private const val EDITOR = "xfiles:editeur:"
     private const val OCR = "xfiles:ocr:"
     private const val SCANNER = "xfiles:scanner:"
+    private const val RENAME = "xfiles:renommage:"
+
+    /** Renommage par lot des éléments posés dans PendingRename (demande numéro [generation]). */
+    fun batchRename(generation: Int) = RENAME + generation
 
     /** Scanner de documents ; le PDF est enregistré dans [directory]. */
     fun scanner(directory: String) = SCANNER + directory
@@ -79,6 +84,7 @@ object Routes {
         data class DocumentView(val path: String, val ocr: Boolean = false) : Route
         data class Editor(val path: String) : Route
         data class Scanner(val directory: String) : Route
+        data class BatchRename(val generation: Int) : Route
     }
 
     fun parse(route: String): Route = when {
@@ -88,6 +94,7 @@ object Routes {
         route.startsWith(CATEGORY) -> runCatching { Route.CategoryList(Category.valueOf(route.removePrefix(CATEGORY))) }.getOrElse { Route.Folder(route) }
         route.startsWith(CLEANUP) -> runCatching { Route.Cleanup(CleanupKind.valueOf(route.removePrefix(CLEANUP))) }.getOrElse { Route.Folder(route) }
         route.startsWith(DOCUMENT) -> Route.DocumentView(route.removePrefix(DOCUMENT))
+        route.startsWith(RENAME) -> Route.BatchRename(route.removePrefix(RENAME).toIntOrNull() ?: 0)
         route.startsWith(SCANNER) -> Route.Scanner(route.removePrefix(SCANNER))
         route.startsWith(OCR) -> Route.DocumentView(route.removePrefix(OCR), ocr = true)
         route.startsWith(EDITOR) -> Route.Editor(route.removePrefix(EDITOR))
@@ -197,6 +204,7 @@ fun BrowserStack(
             is Routes.Route.CategoryList -> CategoryScreen(route.category, onOpen = ::open, onReveal = ::reveal, onBack = ::goUp)
             is Routes.Route.Cleanup -> CleanupScreen(route.kind, onReveal = ::reveal, onBack = ::goUp)
             is Routes.Route.DocumentView -> DocumentScreen(path = route.path, onOpen = ::open, onBack = ::goUp, ocr = route.ocr)
+            is Routes.Route.BatchRename -> BatchRenameScreen(generation = route.generation, onBack = ::goUp)
             is Routes.Route.Scanner -> ScannerScreen(directory = route.directory, onOpen = ::open, onBack = ::goUp)
             is Routes.Route.Editor -> EditorScreen(path = route.path, onBack = ::goUp)
             is Routes.Route.Search -> SearchScreen(scope = route.scope, onOpen = ::open, onReveal = ::reveal, onBack = ::goUp)

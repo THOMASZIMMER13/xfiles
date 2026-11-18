@@ -252,6 +252,14 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
         announcer.announce(res.getQuantityString(plural, items.size, items.size, items.first().name))
     }
 
+    /** Pose la sélection (dans l'ordre affiché) pour le renommage par lot et quitte la sélection. */
+    fun prepareBatchRename(): Int {
+        val items = selectedItems().map { io.github.thomaszimmer13.xfiles.data.rename.RenameSource(it.path, it.name, it.lastModified, it.isDirectory) }
+        val generation = (getApplication<Application>() as io.github.thomaszimmer13.xfiles.XFilesApplication).container.pendingRename.set(items)
+        endSelection(moveFocusToTitle = false)
+        return generation
+    }
+
     fun putSelectionInClipboard(mode: TransferMode) = putInClipboard(selectedItems(), mode)
 
     fun clearClipboard() {

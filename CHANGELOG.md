@@ -60,6 +60,13 @@ Première version publique : un gestionnaire de fichiers pensé d'abord pour Tal
 - PDF protégés par mot de passe ; PDF scannés signalés, avec « Ouvrir avec ».
 - Éditeur de texte (jusqu'à 2 Mo) : vrai champ de saisie Android, encodage et fins de ligne conservés, enregistrement sans risque, avertissement en quittant sans enregistrer. Bouton « Nouveau fichier texte » dans chaque dossier.
 
+### Renommage par lot
+- Depuis la sélection : bouton « Renommer ».
+- Rechercher et remplacer (texte ou expression régulière, avec groupes $1…), ou modèle avec balises {nom}, {n}, {date}, {ext} ; numéro de départ et nombre de chiffres.
+- Majuscules et minuscules (tout en minuscules, majuscules, première lettre des mots…), extension gardée par défaut.
+- Aperçu ligne par ligne (« IMG_001.jpg devient Vacances 01.jpg »), conflits signalés, résumé annoncé à la fin de la frappe.
+- Renommage en deux temps (les échanges de noms marchent), retour arrière en cas d'échec, « Annuler le renommage ».
+
 ### Reconnaissance de texte
 - Photos, captures d'écran et PDF scannés : « Reconnaître le texte » (action sur le fichier, ou bouton du lecteur quand un PDF n'a pas de texte).
 - Moteur libre PaddleOCR PP-OCRv5 (latin : français, accents, ponctuation), entièrement sur le téléphone ; modèles de 13 Mo téléchargés une seule fois, avec accord, et vérifiés.
