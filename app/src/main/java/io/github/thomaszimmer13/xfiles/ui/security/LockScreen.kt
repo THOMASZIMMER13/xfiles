@@ -43,7 +43,8 @@ fun LockScreen(onUnlocked: () -> Unit, onDisable: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val title = stringResource(R.string.lock_prompt_title)
-    val available = remember { Biometrics.available(context, Biometrics.ANY) }
+    // Verrouillage d'écran du téléphone : la fenêtre d'Android peut toujours demander le code.
+    val available = remember { Biometrics.deviceSecure(context) }
     val headingFocus = remember { FocusRequester() }
     FocusOnceEffect(ready = true) { headingFocus.requestFocus() }
 
@@ -89,7 +90,8 @@ fun IdentityGate(title: String, onConfirmed: () -> Unit, onBack: () -> Unit) {
 
     fun ask() {
         val activity = Biometrics.activity(context) ?: return
-        if (!Biometrics.available(context, Biometrics.ANY)) return onConfirmed()
+        // Pas de verrouillage d'écran : aucune identité vérifiable (un capteur indisponible ne suffit pas).
+        if (!Biometrics.deviceSecure(context)) return onConfirmed()
         scope.launch {
             if (Biometrics.prompt(activity, promptTitle) != null) onConfirmed() else failed = true
         }

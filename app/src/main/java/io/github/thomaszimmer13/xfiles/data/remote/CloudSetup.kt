@@ -10,6 +10,20 @@ import org.json.JSONObject
 object CloudSetup {
     private const val MAX_QUESTIONS = 30
 
+    /** Port du petit serveur local de rclone qui reçoit la réponse du navigateur. */
+    const val OAUTH_PORT = 53682
+
+    /**
+     * Vrai si quelqu'un écoute déjà sur le port de connexion (H-05) : une autre app pourrait y
+     * recevoir le code d'autorisation à la place de rclone (pas de PKCE pour ces services).
+     */
+    fun oauthPortTaken(port: Int = OAUTH_PORT, timeoutMs: Int = 300): Boolean = try {
+        java.net.Socket().use { it.connect(java.net.InetSocketAddress("127.0.0.1", port), timeoutMs) }
+        true
+    } catch (_: java.io.IOException) {
+        false
+    }
+
     fun configure(rpc: RcloneRpc, name: String, type: String, parameters: JSONObject) {
         val opt = { JSONObject().put("nonInteractive", true).put("obscure", true) }
         var out = rpc.call("config/create", JSONObject().put("name", name).put("type", type).put("parameters", parameters).put("opt", opt()))

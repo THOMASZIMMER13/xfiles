@@ -107,6 +107,22 @@ interface RemoteClient : Closeable {
             Protocol.SHIZUKU -> io.github.thomaszimmer13.xfiles.data.shizuku.ShizukuRemote(requireNotNull(shizuku))
         }
 
+        /**
+         * Nom d'élément acceptable venu d'un serveur, ou null : un nom vide, « . », « .. » ou contenant
+         * « / » ou un caractère nul permettrait d'écrire hors du dossier prévu (C-01).
+         * « \ » reste permis : ce n'est pas un séparateur sous Android (fichiers Linux légitimes).
+         */
+        fun safeName(name: String): String? = name.takeIf {
+            it.isNotEmpty() && it != "." && it != ".." && '/' !in it && '\u0000' !in it
+        }
+
+        /** Vrai si [file] est [root] ou se trouve dessous (chemins canoniques, liens résolus). */
+        fun inside(root: java.io.File, file: java.io.File): Boolean {
+            val r = root.canonicalPath
+            val p = file.canonicalPath
+            return p == r || p.startsWith(r + java.io.File.separator)
+        }
+
         /** « /a/b » + « c » → « /a/b/c ». */
         fun child(parent: String, name: String) = if (parent.endsWith("/")) parent + name else "$parent/$name"
 

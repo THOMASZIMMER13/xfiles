@@ -1,8 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Fichiers que XFiles peut transmettre aux autres apps (ouvrir, partager).
-  root-path couvre la mémoire interne, les cartes SD et les clés USB.
+  Fichiers que XFiles peut transmettre aux autres apps (ouvrir, partager), et rien d'autre (H-02) :
+  - storage/ : mémoire interne (/storage/emulated/0), cartes SD et clés USB (/storage/XXXX-XXXX) ;
+  - remote/ : fichiers ouverts depuis un serveur, un compte, un coffre ou les données des applications ;
+  - apercu/ : élément d'archive ouvert sans l'extraire.
+  Les fichiers privés d'XFiles (configuration, comptes, verrouillage) ne sont jamais exposés.
 -->
 <paths>
-    <root-path name="root" path="." />
+    <root-path name="storage" path="storage/" />
+    <cache-path name="remote" path="remote/" />
+    <cache-path name="apercu" path="apercu/" />
 </paths>

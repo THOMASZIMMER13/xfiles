@@ -421,7 +421,7 @@ private fun SecuritySection(onOpen: (String) -> Unit, announcer: io.github.thoma
 
     fun confirmThen(action: () -> Unit) {
         val Bio = io.github.thomaszimmer13.xfiles.ui.security.Biometrics
-        if (!Bio.available(context, Bio.ANY)) return announcer.announce(noMethod)
+        if (!Bio.deviceSecure(context)) return announcer.announce(noMethod)
         val activity = Bio.activity(context) ?: return
         scope.launch { if (Bio.prompt(activity, confirmTitle) != null) action() }
     }

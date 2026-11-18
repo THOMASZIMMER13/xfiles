@@ -14,7 +14,12 @@ import java.time.Duration
 
 /** FTP et FTPS explicite (Apache Commons Net), mode passif, binaire, UTF-8. */
 class FtpRemote(server: RemoteServer) : RemoteClient {
-    private val ftp: FTPClient = if (server.protocol == Protocol.FTPS) FTPSClient(false) else FTPClient()
+    private val trust: FtpsTrust? = if (server.protocol == Protocol.FTPS) FtpsTrust(server.hostKey) else null
+    private val ftp: FTPClient = if (trust != null) FTPSClient(false).apply {
+        setTrustManager(trust)
+        // Nom d'hôte vérifié seulement pour un certificat d'autorité ; un certificat épinglé l'est par son empreinte.
+        if (server.hostKey.isEmpty()) setHostnameVerifier(javax.net.ssl.HttpsURLConnection.getDefaultHostnameVerifier())
+    } else FTPClient()
     private val root = server.basePath.trim().trimEnd('/')
 
     init {
@@ -29,8 +34,12 @@ class FtpRemote(server: RemoteServer) : RemoteClient {
         } catch (e: ConnectException) {
             throw RemoteException(RemoteException.Reason.UNREACHABLE, e.message, e)
         } catch (e: javax.net.ssl.SSLException) {
+            close()
+            trust?.hostKeyFailure(hostnameMismatch = e.message?.contains("Hostname", ignoreCase = true) == true)?.let { throw it }
             throw RemoteException(RemoteException.Reason.TLS, e.message, e)
         } catch (e: IOException) {
+            // Négociation TLS refusée (certificat inconnu) remontée comme simple erreur d'entrée-sortie.
+            trust?.hostKeyFailure()?.let { close(); throw it }
             throw RemoteException(RemoteException.Reason.UNREACHABLE, e.message, e)
         }
         if (!FTPReply.isPositiveCompletion(ftp.replyCode)) {
@@ -61,7 +70,7 @@ class FtpRemote(server: RemoteServer) : RemoteClient {
             emptyArray()
         }.ifEmpty { if (FTPReply.isPositiveCompletion(ftp.replyCode)) emptyArray() else ftp.listFiles(real(path)) }
         check(path)
-        files.filter { it.name != "." && it.name != ".." && it.name.isNotEmpty() }.map {
+        files.filter { RemoteClient.safeName(it.name.orEmpty()) != null }.map {
             RemoteEntry(it.name, RemoteClient.child(path, it.name), it.isDirectory, it.size.coerceAtLeast(0), it.timestamp?.timeInMillis ?: 0L)
         }
     }

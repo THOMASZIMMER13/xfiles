@@ -14,7 +14,8 @@ class LocalFileSource : FileSource {
             val children = File(path).listFiles() ?: throw FolderNotReadableException(path)
             children
                 // La corbeille reste invisible, même quand les fichiers cachés sont affichés.
-                .filter { it.name != LocalTrash.DIR_NAME && (includeHidden || !it.isHidden()) }
+                // Idem pour les éléments temporaires d'un remplacement en cours.
+                .filter { it.name != LocalTrash.DIR_NAME && !io.github.thomaszimmer13.xfiles.data.transfer.LocalTransfer.isReplaceTemp(it.name) && (includeHidden || !it.isHidden()) }
                 .map { file -> file.toItem(includeHidden) }
         }
 

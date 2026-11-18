@@ -125,6 +125,17 @@ class ServerEditViewModel(application: Application) : AndroidViewModel(applicati
         announcer.announce(text(R.string.cloud_browser_opened, label))
         connectJob = viewModelScope.launch {
             val rclone = container.rclone
+            // Port de connexion déjà occupé par une autre app : on refuse plutôt que de lui livrer le code.
+            val taken = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { rclone.call("config/oauthstop", org.json.JSONObject()) } // notre propre écoute éventuelle
+                CloudSetup.oauthPortTaken()
+            }
+            if (taken) {
+                _state.update { it.copy(connecting = false) }
+                container.feedback.failure()
+                announcer.announce(text(R.string.cloud_port_busy))
+                return@launch
+            }
             val watcher = launch(kotlinx.coroutines.Dispatchers.IO) {
                 // Page de connexion : connue quand le petit serveur local de rclone est prêt.
                 while (true) {
@@ -224,7 +235,7 @@ class ServerEditViewModel(application: Application) : AndroidViewModel(applicati
     /** Change de protocole : le port suit, sauf s'il avait été modifié. */
     fun setProtocol(p: Protocol) = _state.update { s ->
         val old = s.server
-        s.copy(server = old.copy(protocol = p, port = if (old.port == old.protocol.defaultPort) p.defaultPort else old.port, hostKey = if (p == Protocol.SFTP) old.hostKey else ""))
+        s.copy(server = old.copy(protocol = p, port = if (old.port == old.protocol.defaultPort) p.defaultPort else old.port, hostKey = if (p == old.protocol) old.hostKey else ""))
     }
 
     private fun normalized(): RemoteServer {

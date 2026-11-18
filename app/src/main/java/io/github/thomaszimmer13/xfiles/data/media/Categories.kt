@@ -92,7 +92,7 @@ object Categories {
 
     /** Dossiers cachés, données des apps et corbeille : jamais montrés dans les catégories. */
     fun isVisible(path: String): Boolean =
-        path.split('/').none { it.startsWith(".") } &&
+        path.split('/').none { it.startsWith(".") || io.github.thomaszimmer13.xfiles.data.transfer.LocalTransfer.isReplaceTemp(it) } &&
             "/Android/data/" !in path && "/Android/obb/" !in path && "/${LocalTrash.DIR_NAME}/" !in path
 
     /** Dossier Téléchargements de la mémoire interne. */

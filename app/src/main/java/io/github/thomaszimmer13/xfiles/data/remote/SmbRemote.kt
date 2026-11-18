@@ -62,7 +62,7 @@ class SmbRemote(server: RemoteServer) : RemoteClient {
     }
 
     override fun list(path: String): List<RemoteEntry> = wrap {
-        share.list(real(path)).filter { it.fileName != "." && it.fileName != ".." }.map {
+        share.list(real(path)).filter { RemoteClient.safeName(it.fileName.orEmpty()) != null }.map {
             val dir = it.fileAttributes and FileAttributes.FILE_ATTRIBUTE_DIRECTORY.value != 0L
             RemoteEntry(it.fileName, RemoteClient.child(path, it.fileName), dir, if (dir) 0 else it.endOfFile, it.lastWriteTime.toEpochMillis())
         }

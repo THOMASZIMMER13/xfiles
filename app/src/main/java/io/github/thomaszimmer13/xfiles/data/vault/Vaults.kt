@@ -58,6 +58,9 @@ class Vaults(
 ) {
     private val cacheRoot = File(context.applicationContext.cacheDir, "remote")
 
+    /** Fichiers de passage de rclone (même dossier que Rclone.transferDir) : en clair pour un coffre. */
+    private val transferRoot = File(context.applicationContext.cacheDir, "rclone-transfers")
+
     fun isOpen(id: String) = keys.get(id) != null
 
     /** Emplacement sur le téléphone : Documents/Coffres XFiles/<nom>. */
@@ -119,12 +122,17 @@ class Vaults(
 
     fun lockAll() {
         keys.open.value.keys.forEach(::lock)
-        purgeCache()
+        purgeCache(atStartup = false)
     }
 
-    /** Copies déchiffrées laissées par un arrêt de l'application. */
-    fun purgeCache() {
+    /**
+     * Copies déchiffrées laissées par un arrêt de l'application (H-04) : fichiers ouverts depuis un
+     * coffre fermé et, au démarrage seulement (aucun transfert ne peut être en cours), tous les
+     * fichiers de passage de rclone, qui peuvent contenir le contenu en clair d'un coffre.
+     */
+    fun purgeCache(atStartup: Boolean = true) {
         cacheRoot.listFiles()?.filter { it.name.startsWith(ID_PREFIX) && !isOpen(it.name) }?.forEach { it.deleteRecursively() }
+        if (atStartup) transferRoot.listFiles()?.forEach { it.deleteRecursively() }
     }
 
     /** Retire le coffre de la liste (ses fichiers chiffrés restent en place). */
@@ -160,7 +168,15 @@ class Vaults(
     }
 
     /** Chiffrement à autoriser par l'empreinte, pour sceller le mot de passe. */
-    fun sealCipher(id: String): Cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, bioKey(id)) }
+    fun sealCipher(id: String): Cipher = try {
+        encryptCipher(id)
+    } catch (_: android.security.keystore.KeyPermanentlyInvalidatedException) {
+        // Empreintes ajoutées ou retirées : la clé est morte pour toujours ; on en crée une neuve (M-03).
+        deleteBioKey(id)
+        encryptCipher(id)
+    }
+
+    private fun encryptCipher(id: String): Cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, bioKey(id)) }
 
     /** Déchiffrement à autoriser par l'empreinte ; null si les empreintes ont changé (scellé perdu). */
     fun openCipher(server: RemoteServer): Cipher? = runCatching {

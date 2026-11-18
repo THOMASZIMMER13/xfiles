@@ -82,7 +82,17 @@ class FileClipboard {
  * Un déplacement sur le même volume est un simple renommage, instantané ; entre deux volumes
  * (mémoire interne → carte SD), c'est une copie suivie de la suppression de l'original.
  */
-class LocalTransfer {
+class LocalTransfer(
+    /** Dossiers où un remplacement est en cours, pour réparer après un arrêt brutal (null : aucun). */
+    private val journal: File? = null,
+    /**
+     * Renommage des éléments temporaires d'un remplacement. Sur la mémoire interne (FUSE), les cartes
+     * SD et clés USB (FAT, exFAT) montées en accès direct, renommer dans un même dossier fonctionne ;
+     * s'il est refusé (volume particulier, lecture seule partielle), on se replie sur l'ancienne
+     * méthode plutôt que de bloquer le remplacement. Paramètre remplaçable pour les tests.
+     */
+    private val rename: (File, File) -> Boolean = { from, to -> from.renameTo(to) },
+) {
 
     /**
      * Éléments de [sources] dont le nom existe déjà dans [targetDir] et qui demanderont un choix.
@@ -121,6 +131,7 @@ class LocalTransfer {
         val names = dir.list()?.toList().orEmpty()
         val clash = names.firstOrNull { it.equals(src.name, ignoreCase = true) }
         val keepExtension = !src.isDirectory
+        val replace = !sameParent && clash != null && choice == ConflictChoice.REPLACE
         val name = when {
             // Copier dans le même dossier : on duplique, comme sur iOS.
             sameParent -> NameValidator.uniqueName(src.name, names, keepExtension)
@@ -128,15 +139,21 @@ class LocalTransfer {
             choice == null -> fail(Reason.ALREADY_EXISTS, source)
             choice == ConflictChoice.SKIP -> return TransferResult.Skipped
             choice == ConflictChoice.KEEP_BOTH -> NameValidator.uniqueName(src.name, names, keepExtension)
-            else -> {
-                // Remplacer : l'élément existant est supprimé avant de placer le nouveau.
-                if (!File(dir, clash).deleteRecursively()) fail(Reason.DENIED, source)
-                src.name
-            }
+            else -> src.name
         }
         if (!dir.canWrite()) fail(Reason.DENIED, targetDir)
         val target = File(dir, name)
 
+        if (replace) {
+            replace(src, File(dir, clash!!), target, mode, listener)
+        } else {
+            place(src, target, mode, listener)
+        }
+        return TransferResult.Done(target.path)
+    }
+
+    /** Copie ou déplacement vers [target], qui n'existe pas encore. */
+    private fun place(src: File, target: File, mode: TransferMode, listener: TransferListener) {
         when (mode) {
             TransferMode.COPY -> copy(src, target, listener)
             TransferMode.MOVE -> if (src.renameTo(target)) {
@@ -144,10 +161,94 @@ class LocalTransfer {
             } else {
                 // Autre volume : copie puis suppression de l'original.
                 copy(src, target, listener)
-                if (!src.deleteRecursively()) fail(Reason.FAILED, source)
+                if (!src.deleteRecursively()) fail(Reason.FAILED, src.path)
             }
         }
-        return TransferResult.Done(target.path)
+    }
+
+    /**
+     * Remplace [old] par [src] sans jamais perdre les deux (H-03) :
+     * 1. le nouvel élément est d'abord copié sous un nom temporaire caché (« -n- ») ;
+     * 2. l'ancien est mis de côté (« -a- ») ;
+     * 3. le nouveau prend le nom définitif, puis l'ancien est supprimé.
+     * Une annulation ou un échec avant l'étape 3 laisse l'ancien intact. Un arrêt brutal est réparé au
+     * démarrage par [recover]. Si le volume refuse les renommages, on revient à l'ancienne méthode
+     * (supprimer puis copier), seule possible.
+     */
+    private fun replace(src: File, old: File, target: File, mode: TransferMode, listener: TransferListener) {
+        val id = java.util.UUID.randomUUID().toString().take(8)
+        val aside = File(target.parentFile, "$REPLACE_PREFIX$id-a-${target.name}")
+        val fresh = File(target.parentFile, "$REPLACE_PREFIX$id-n-${target.name}")
+        if (aside.name.length > MAX_NAME) return replaceDirectly(src, old, target, mode, listener)
+        note(target.parentFile!!, add = true)
+        try {
+            // Déplacement sur le même volume : simple renommage, rien à copier.
+            val renamed = mode == TransferMode.MOVE && rename(src, fresh)
+            if (!renamed) copy(src, fresh, listener)
+            if (!rename(old, aside)) {
+                // Volume sans renommage possible : nouveau en place après suppression de l'ancien.
+                if (renamed) rename(fresh, src)
+                fresh.deleteRecursively()
+                return replaceDirectly(src, old, target, mode, listener)
+            }
+            if (!rename(fresh, target)) {
+                rename(aside, old)
+                if (renamed) rename(fresh, src)
+                fresh.deleteRecursively()
+                fail(Reason.FAILED, src.path)
+            }
+            aside.deleteRecursively()
+            if (renamed) listener.onBytes(sizeOf(target))
+            else if (mode == TransferMode.MOVE && !src.deleteRecursively()) fail(Reason.FAILED, src.path)
+        } catch (e: Exception) {
+            fresh.deleteRecursively()
+            if (aside.exists() && !old.exists()) rename(aside, old)
+            throw e
+        } finally {
+            note(target.parentFile!!, add = false)
+        }
+    }
+
+    private fun replaceDirectly(src: File, old: File, target: File, mode: TransferMode, listener: TransferListener) {
+        if (!old.deleteRecursively()) fail(Reason.DENIED, src.path)
+        place(src, target, mode, listener)
+    }
+
+    @Synchronized
+    private fun note(dir: File, add: Boolean) {
+        val file = journal ?: return
+        runCatching {
+            val lines = (if (file.exists()) file.readLines() else emptyList()).toMutableList()
+            if (add) lines += dir.path else lines.remove(dir.path)
+            file.parentFile?.mkdirs()
+            file.writeText(lines.joinToString("\n"))
+        }
+    }
+
+    /**
+     * Après un arrêt brutal pendant un remplacement : la copie temporaire (« -n- ») est supprimée ;
+     * l'ancien élément mis de côté (« -a- ») reprend son nom s'il est libre, sinon (le nouveau est en
+     * place) il est supprimé. À appeler au démarrage, avant tout transfert.
+     */
+    @Synchronized
+    fun recover() {
+        val file = journal ?: return
+        val dirs = runCatching { file.readLines() }.getOrDefault(emptyList()).filter { it.isNotBlank() }.distinct()
+        for (path in dirs) recoverIn(File(path))
+        file.delete()
+    }
+
+    internal fun recoverIn(dir: File) {
+        dir.listFiles { f -> isReplaceTemp(f.name) }?.forEach { f ->
+            val rest = f.name.removePrefix(REPLACE_PREFIX)
+            val kind = rest.drop(9).take(2) // « a- » ou « n- » après l'identifiant
+            val original = rest.drop(11)
+            when {
+                kind == "n-" -> f.deleteRecursively()
+                kind == "a-" && original.isNotEmpty() && !File(dir, original).exists() -> f.renameTo(File(dir, original))
+                else -> f.deleteRecursively()
+            }
+        }
     }
 
     private fun copy(src: File, target: File, listener: TransferListener) {
@@ -174,4 +275,12 @@ class LocalTransfer {
 
     private fun fail(reason: Reason, what: String): Nothing =
         throw FileOperationException(reason, "$reason : $what")
+
+    companion object {
+        /** Préfixe des éléments temporaires d'un remplacement (jamais montrés : Recherche, Récents…). */
+        const val REPLACE_PREFIX = ".xfiles-remplace-"
+        private const val MAX_NAME = 255
+
+        fun isReplaceTemp(name: String) = name.startsWith(REPLACE_PREFIX)
+    }
 }

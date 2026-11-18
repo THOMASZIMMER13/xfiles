@@ -27,7 +27,11 @@ class XFilesApplication : Application() {
         super.onCreate()
         container = AppContainer(this)
         // Copies déchiffrées des coffres laissées par un arrêt de l'application.
-        Thread { runCatching { container.vaults.purgeCache() } }.start()
+        // Remplacements interrompus par un arrêt brutal (H-03).
+        Thread {
+            runCatching { container.vaults.purgeCache() }
+            runCatching { container.transfer.recover() }
+        }.start()
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
                 if (startedActivities++ == 0) container.appLock.onForeground()
@@ -63,7 +67,7 @@ class AppContainer(application: Application) {
 
     /** Copier / Déplacer → Coller ici, partagé entre tous les dossiers et onglets. */
     val clipboard = FileClipboard()
-    val transfer = LocalTransfer()
+    val transfer = LocalTransfer(java.io.File(application.filesDir, "remplacements.txt"))
 
     /** Opérations longues (coller, extraire, compresser), qui survivent aux changements d'écran. */
     val feedback = Feedback(preferences)

@@ -32,9 +32,9 @@ class ShizukuRemote(private val files: () -> IFileService) : RemoteClient {
 
     override fun list(path: String): List<RemoteEntry> {
         val array = JSONArray(call(path) { it.list(real(path)) })
-        return (0 until array.length()).map { i ->
+        return (0 until array.length()).mapNotNull { i ->
             val o = array.getJSONObject(i)
-            val name = o.getString("n")
+            val name = RemoteClient.safeName(o.getString("n")) ?: return@mapNotNull null
             RemoteEntry(name, RemoteClient.child(path, name), o.getBoolean("d"), o.optLong("s"), o.optLong("m"))
         }
     }

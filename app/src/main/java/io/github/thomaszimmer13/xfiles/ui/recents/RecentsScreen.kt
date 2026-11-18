@@ -157,7 +157,7 @@ class RecentsViewModel(application: Application) : AndroidViewModel(application)
             while (cursor.moveToNext()) {
                 val path = cursor.getString(0) ?: continue
                 val segments = path.split('/')
-                if (segments.any { it.startsWith(".") }) continue
+                if (segments.any { it.startsWith(".") || io.github.thomaszimmer13.xfiles.data.transfer.LocalTransfer.isReplaceTemp(it) }) continue
                 if ("/Android/data/" in path || "/Android/obb/" in path || "/${LocalTrash.DIR_NAME}/" in path) continue
                 paths += path
             }

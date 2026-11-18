@@ -32,9 +32,9 @@ class RcloneRemote(
     override fun list(path: String): List<RemoteEntry> {
         val out = call("operations/list", path, JSONObject().put("fs", fs).put("remote", rel(path)).put("opt", JSONObject()))
         val list = out.optJSONArray("list") ?: return emptyList()
-        return (0 until list.length()).map { i ->
+        return (0 until list.length()).mapNotNull { i ->
             val o = list.getJSONObject(i)
-            val name = o.getString("Name")
+            val name = RemoteClient.safeName(o.getString("Name")) ?: return@mapNotNull null
             val isDir = o.optBoolean("IsDir")
             RemoteEntry(name, RemoteClient.child(path, name), isDir, if (isDir) 0 else o.optLong("Size").coerceAtLeast(0), parseTime(o.optString("ModTime")))
         }

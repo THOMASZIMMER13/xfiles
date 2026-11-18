@@ -205,7 +205,10 @@ class RemoteFolderViewModel(application: Application) : AndroidViewModel(applica
     /** Fichier : copié dans le cache (réutilisé s'il n'a pas changé), puis ouvert. */
     fun open(entry: RemoteEntry) {
         val server = _state.value.server ?: return
-        val target = File(getApplication<Application>().cacheDir, "remote/${server.id}${entry.path}")
+        val root = File(getApplication<Application>().cacheDir, "remote/${server.id}")
+        val target = File(root, entry.path.trimStart('/'))
+        // Nom piégé venu du serveur : jamais d'écriture hors du cache de ce serveur (C-01).
+        if (!RemoteClient.inside(root, target) || target == root) return announcer.announce(text(R.string.remote_error_protocol))
         if (target.exists() && target.length() == entry.size && (entry.lastModified == 0L || target.lastModified() == entry.lastModified)) {
             _state.update { it.copy(opened = target) }
             return
@@ -229,6 +232,7 @@ class RemoteFolderViewModel(application: Application) : AndroidViewModel(applica
         val downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         transfer(text(R.string.remote_downloading, entry.name)) { onProgress ->
             val dest = unique(File(downloads, entry.name))
+            if (!RemoteClient.inside(downloads, dest) || dest == downloads) throw RemoteException(RemoteException.Reason.PROTOCOL, entry.name)
             sessions.use(server) { c -> fetch(c, entry, dest, onProgress) }
             text(R.string.remote_downloaded, dest.name)
         }
@@ -237,7 +241,11 @@ class RemoteFolderViewModel(application: Application) : AndroidViewModel(applica
     private fun fetch(c: RemoteClient, entry: RemoteEntry, dest: File, onProgress: (Long, Long) -> Unit) {
         if (entry.isDirectory) {
             dest.mkdirs()
-            for (child in c.list(entry.path)) fetch(c, child, File(dest, child.name), onProgress)
+            for (child in c.list(entry.path)) {
+                val next = File(dest, child.name)
+                if (!RemoteClient.inside(dest, next) || next == dest) throw RemoteException(RemoteException.Reason.PROTOCOL, child.name)
+                fetch(c, child, next, onProgress)
+            }
         } else {
             val tmp = File(dest.path + ".part")
             tmp.outputStream().use { out -> c.download(entry.path, out) { done, total -> onProgress(done, if (total > 0) total else entry.size) } }

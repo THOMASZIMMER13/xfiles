@@ -93,11 +93,13 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         val results = mutableListOf<SearchResult>()
         for (start in starts) {
             val walk = start.walkTopDown().onEnter { dir ->
-                dir == start || (dir.name != LocalTrash.DIR_NAME && (showHidden || !dir.name.startsWith(".")))
+                dir == start || (dir.name != LocalTrash.DIR_NAME && !io.github.thomaszimmer13.xfiles.data.transfer.LocalTransfer.isReplaceTemp(dir.name) && (showHidden || !dir.name.startsWith(".")))
             }
             for (file in walk) {
                 coroutineContext.ensureActive()
                 if (file == start || file.name == LocalTrash.DIR_NAME) continue
+                // Éléments temporaires d'un remplacement en cours : jamais proposés, même cachés affichés.
+                if (io.github.thomaszimmer13.xfiles.data.transfer.LocalTransfer.isReplaceTemp(file.name)) continue
                 if (!showHidden && file.name.startsWith(".")) continue
                 val name = normalize(file.name)
                 if (words.all { name.contains(it) }) {

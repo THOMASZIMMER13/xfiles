@@ -20,6 +20,14 @@ object Biometrics {
     /** Coffres : empreinte (ou visage sûr) seulement, la clé du Keystore l'exige. */
     const val STRONG = BIOMETRIC_STRONG
 
+    /**
+     * Le téléphone a-t-il un verrouillage d'écran (code, schéma, mot de passe) ? C'est le seul critère
+     * pour renoncer au verrouillage d'XFiles (M-02) : un capteur momentanément indisponible ne compte
+     * pas, la fenêtre d'Android propose alors le code.
+     */
+    fun deviceSecure(context: Context): Boolean =
+        context.getSystemService(android.app.KeyguardManager::class.java)?.isDeviceSecure == true
+
     fun available(context: Context, authenticators: Int): Boolean =
         BiometricManager.from(context).canAuthenticate(authenticators) == BiometricManager.BIOMETRIC_SUCCESS
 

@@ -72,7 +72,7 @@ class SftpRemote(server: RemoteServer) : RemoteClient {
     private fun real(path: String) = (root + path).ifEmpty { "/" }
 
     override fun list(path: String): List<RemoteEntry> = wrap {
-        sftp.ls(real(path)).filter { it.name != "." && it.name != ".." }.map {
+        sftp.ls(real(path)).filter { RemoteClient.safeName(it.name) != null }.map {
             val a = it.attributes
             RemoteEntry(it.name, RemoteClient.child(path, it.name), a.type == FileMode.Type.DIRECTORY, a.size, a.mtime * 1000)
         }

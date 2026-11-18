@@ -188,6 +188,11 @@ class TransferManager(
             for (item in incoming) {
                 if (cancelRequested) throw TransferCancelledException()
                 tracker.current = item.name
+                // Adresse refusée (fichier privé d'XFiles, file://) : comptée comme échec, rien n'est lu.
+                if (!io.github.thomaszimmer13.xfiles.data.incoming.IncomingUris.acceptable(item.uri, app.packageName)) {
+                    failed++
+                    continue
+                }
                 val target = File(dir, NameValidator.uniqueName(item.name, dir.list()?.toList().orEmpty(), keepExtension = true))
                 try {
                     val input = resolver.openInputStream(item.uri) ?: throw FileOperationException(FileOperationException.Reason.NOT_FOUND, item.name)

@@ -1102,4 +1102,7 @@
     <string name="vault_remove_title">Retirer le coffre ?</string>
     <string name="vault_remove_message">%1$s disparaîtra de la liste. Ses fichiers chiffrés restent en place et pourront être ouverts avec rclone et le mot de passe.</string>
     <string name="vault_removed">Coffre %1$s retiré</string>
+
+    <!-- Lot 1 sécurité -->
+    <string name="cloud_port_busy">Connexion impossible : une autre application occupe le port de connexion de XFiles. Fermez les applications récemment installées ou redémarrez le téléphone, puis réessayez.</string>
 </resources>
