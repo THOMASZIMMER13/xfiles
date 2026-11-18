@@ -71,6 +71,9 @@ class AppContainer(application: Application) {
     /** Lecteur audio et vidéo intégré. */
     val player = io.github.thomaszimmer13.xfiles.player.PlayerHub(application, preferences, feedback)
 
+    /** Reconnaissance de texte (images, PDF scannés, scanner). */
+    val ocr = io.github.thomaszimmer13.xfiles.data.ocr.OcrService(application, kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default))
+
     /** Partage vers XFiles, choix d'un fichier pour une autre app, raccourci vers un dossier. */
     val incoming = IncomingRequests()
 }

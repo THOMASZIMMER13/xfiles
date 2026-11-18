@@ -41,6 +41,10 @@ object Routes {
     const val STORAGE = "xfiles:stockage"
     private const val DOCUMENT = "xfiles:document:"
     private const val EDITOR = "xfiles:editeur:"
+    private const val OCR = "xfiles:ocr:"
+
+    /** Reconnaissance du texte d'une image ou d'un PDF, affichée dans le lecteur. */
+    fun ocr(path: String) = OCR + path
 
     /** Lecteur de documents intégré. */
     fun document(path: String) = DOCUMENT + path
@@ -67,7 +71,7 @@ object Routes {
         data class CategoryList(val category: Category) : Route
         data object Storage : Route
         data class Cleanup(val kind: CleanupKind) : Route
-        data class DocumentView(val path: String) : Route
+        data class DocumentView(val path: String, val ocr: Boolean = false) : Route
         data class Editor(val path: String) : Route
     }
 
@@ -78,6 +82,7 @@ object Routes {
         route.startsWith(CATEGORY) -> runCatching { Route.CategoryList(Category.valueOf(route.removePrefix(CATEGORY))) }.getOrElse { Route.Folder(route) }
         route.startsWith(CLEANUP) -> runCatching { Route.Cleanup(CleanupKind.valueOf(route.removePrefix(CLEANUP))) }.getOrElse { Route.Folder(route) }
         route.startsWith(DOCUMENT) -> Route.DocumentView(route.removePrefix(DOCUMENT))
+        route.startsWith(OCR) -> Route.DocumentView(route.removePrefix(OCR), ocr = true)
         route.startsWith(EDITOR) -> Route.Editor(route.removePrefix(EDITOR))
         route.startsWith(SEARCH) -> Route.Search(route.removePrefix(SEARCH).ifEmpty { null })
         route.startsWith(ZIP) -> route.removePrefix(ZIP).let { Route.Zip(it.substringBefore('\u0000'), it.substringAfter('\u0000', "")) }
@@ -184,7 +189,7 @@ fun BrowserStack(
             Routes.Route.Storage -> StorageScreen(onOpen = ::open, onBack = ::goUp)
             is Routes.Route.CategoryList -> CategoryScreen(route.category, onOpen = ::open, onReveal = ::reveal, onBack = ::goUp)
             is Routes.Route.Cleanup -> CleanupScreen(route.kind, onReveal = ::reveal, onBack = ::goUp)
-            is Routes.Route.DocumentView -> DocumentScreen(path = route.path, onOpen = ::open, onBack = ::goUp)
+            is Routes.Route.DocumentView -> DocumentScreen(path = route.path, onOpen = ::open, onBack = ::goUp, ocr = route.ocr)
             is Routes.Route.Editor -> EditorScreen(path = route.path, onBack = ::goUp)
             is Routes.Route.Search -> SearchScreen(scope = route.scope, onOpen = ::open, onReveal = ::reveal, onBack = ::goUp)
             is Routes.Route.Zip -> ZipScreen(

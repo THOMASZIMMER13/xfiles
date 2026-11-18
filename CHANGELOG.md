@@ -60,6 +60,13 @@ Première version publique : un gestionnaire de fichiers pensé d'abord pour Tal
 - PDF protégés par mot de passe ; PDF scannés signalés, avec « Ouvrir avec ».
 - Éditeur de texte (jusqu'à 2 Mo) : vrai champ de saisie Android, encodage et fins de ligne conservés, enregistrement sans risque, avertissement en quittant sans enregistrer. Bouton « Nouveau fichier texte » dans chaque dossier.
 
+### Reconnaissance de texte
+- Photos, captures d'écran et PDF scannés : « Reconnaître le texte » (action sur le fichier, ou bouton du lecteur quand un PDF n'a pas de texte).
+- Moteur libre PaddleOCR PP-OCRv5 (latin : français, accents, ponctuation), entièrement sur le téléphone ; modèles de 13 Mo téléchargés une seule fois, avec accord, et vérifiés.
+- Page penchée, tournée ou à l'envers : redressée automatiquement. Lignes recollées en paragraphes, césures supprimées.
+- Résultat dans le lecteur de documents (recherche, liens, numéros, copier) ; on lit la première page pendant que la suite est reconnue ; « Enregistrer le texte » crée un .txt à côté ; résultat gardé en cache.
+- Réglages : état des modèles, téléchargement, suppression.
+
 ### Réglages
 - Confirmation avant la corbeille (désactivable), fichiers cachés, informations sur la version et la licence.
 - Annoncer la position dans les listes (« 3 sur 12 »), sons de confirmation discrets (réussite, échec), tous deux désactivables.

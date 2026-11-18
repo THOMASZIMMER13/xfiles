@@ -58,6 +58,7 @@ import io.github.thomaszimmer13.xfiles.a11y.FileDescriptions
 import io.github.thomaszimmer13.xfiles.data.archive.isArchive
 import io.github.thomaszimmer13.xfiles.data.open.Shortcuts
 import io.github.thomaszimmer13.xfiles.data.media.MediaKinds
+import io.github.thomaszimmer13.xfiles.data.ocr.OcrService
 import io.github.thomaszimmer13.xfiles.ui.player.AddToPlaylistDialog
 import io.github.thomaszimmer13.xfiles.ui.components.itemIcon
 import io.github.thomaszimmer13.xfiles.ui.components.IncomingBanner
@@ -129,6 +130,7 @@ fun FolderScreen(
         compress = { item -> withNotifications { viewModel.compress(listOf(item)) } },
         duplicate = { item -> withNotifications { viewModel.duplicate(item) } },
         enqueue = { item -> launcher.enqueue(listOf(item.path)) },
+        recognizeText = { item -> onOpen(Routes.ocr(item.path)) },
         addToPlaylist = { item -> playlistPath = item.path },
         addShortcut = { item ->
             if (!Shortcuts.pinFolder(context, item.path, item.name)) viewModel.announcer.announce(shortcutUnsupported)
@@ -454,6 +456,7 @@ private class FileRowActions(
     val duplicate: (FileItem) -> Unit,
     /** Audio ou vidéo : ajouter à la file de lecture. */
     val enqueue: (FileItem) -> Unit,
+    val recognizeText: (FileItem) -> Unit,
     /** Audio : ajouter à une liste m3u. */
     val addToPlaylist: (FileItem) -> Unit,
     /** Dossier : raccourci sur l'écran d'accueil. */
@@ -603,6 +606,7 @@ private fun FileRow(
     val moveLabel = stringResource(R.string.action_move)
     val duplicateLabel = stringResource(R.string.action_duplicate)
     val enqueueLabel = stringResource(R.string.player_enqueue)
+    val ocrLabel = stringResource(R.string.ocr_action)
     val addPlaylistLabel = stringResource(R.string.player_add_to_playlist)
     val shortcutLabel = stringResource(R.string.action_add_shortcut)
     val checkLabel = stringResource(if (selected) R.string.toggle_unselect else R.string.toggle_select)
@@ -633,6 +637,9 @@ private fun FileRow(
                         add(CustomAccessibilityAction(copyLabel) { actions.copy(item); true })
                         add(CustomAccessibilityAction(moveLabel) { actions.move(item); true })
                         add(CustomAccessibilityAction(duplicateLabel) { actions.duplicate(item); true })
+                        if (!item.isDirectory && (OcrService.isImage(item.name) || item.name.endsWith(".pdf", ignoreCase = true))) {
+                            add(CustomAccessibilityAction(ocrLabel) { actions.recognizeText(item); true })
+                        }
                         if (!item.isDirectory && MediaKinds.isMedia(item.name)) {
                             add(CustomAccessibilityAction(enqueueLabel) { actions.enqueue(item); true })
                         }

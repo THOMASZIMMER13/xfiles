@@ -45,6 +45,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.thomaszimmer13.xfiles.R
+import io.github.thomaszimmer13.xfiles.data.ocr.OcrModelState
 import io.github.thomaszimmer13.xfiles.XFilesApplication
 import io.github.thomaszimmer13.xfiles.ui.components.FocusOnceEffect
 import io.github.thomaszimmer13.xfiles.ui.components.SectionHeader
@@ -66,6 +67,18 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val player = preferences.playerSettings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PreferencesRepository.PlayerSettings())
 
     val builtinDocuments = preferences.builtinDocuments.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    private val ocr = (application as XFilesApplication).container.ocr
+    val ocrState = ocr.state
+    val ocrSize = ocr.downloadSize
+
+    fun downloadOcr() = ocr.download()
+
+    fun cancelOcrDownload() = ocr.cancelDownload()
+
+    fun deleteOcr() {
+        viewModelScope.launch { ocr.deleteModels() }
+    }
 
     fun setBuiltinDocuments(value: Boolean) {
         viewModelScope.launch { preferences.setBuiltinDocuments(value) }
@@ -116,6 +129,17 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = viewModel(
     val feedbackSounds by viewModel.feedbackSounds.collectAsStateWithLifecycle()
     val player by viewModel.player.collectAsStateWithLifecycle()
     val builtinDocuments by viewModel.builtinDocuments.collectAsStateWithLifecycle()
+    val ocrState by viewModel.ocrState.collectAsStateWithLifecycle()
+    var confirmDeleteOcr by remember { mutableStateOf(false) }
+    if (confirmDeleteOcr) {
+        AlertDialog(
+            onDismissRequest = { confirmDeleteOcr = false },
+            title = { Text(stringResource(R.string.ocr_delete_title), modifier = Modifier.semantics { heading() }) },
+            text = { Text(stringResource(R.string.ocr_delete_message)) },
+            confirmButton = { TextButton(onClick = { confirmDeleteOcr = false; viewModel.deleteOcr() }) { Text(stringResource(R.string.ocr_delete)) } },
+            dismissButton = { TextButton(onClick = { confirmDeleteOcr = false }) { Text(stringResource(R.string.action_cancel)) } },
+        )
+    }
     var skipDialog by remember { mutableStateOf<Boolean?>(null) }
     val context = LocalContext.current
     val version = remember {
@@ -186,6 +210,13 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = viewModel(
                 checked = builtinDocuments,
                 onChange = viewModel::setBuiltinDocuments,
             )
+            OcrModelRow(
+                state = ocrState,
+                size = android.text.format.Formatter.formatShortFileSize(LocalContext.current, viewModel.ocrSize),
+                onDownload = viewModel::downloadOcr,
+                onCancel = viewModel::cancelOcrDownload,
+                onDelete = { confirmDeleteOcr = true },
+            )
 
             SectionHeader(stringResource(R.string.settings_section_about))
             Text(
@@ -227,6 +258,41 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = viewModel(
             onDismiss = { skipDialog = null },
         )
         null -> Unit
+    }
+}
+
+/** Modèles de reconnaissance : état, et une seule action selon l'état (télécharger, annuler, supprimer). */
+@Composable
+private fun OcrModelRow(state: OcrModelState, size: String, onDownload: () -> Unit, onCancel: () -> Unit, onDelete: () -> Unit) {
+    val label = stringResource(R.string.settings_ocr)
+    val value = when (state) {
+        OcrModelState.Missing -> stringResource(R.string.settings_ocr_missing, size)
+        is OcrModelState.Downloading -> stringResource(R.string.ocr_downloading, (state.fraction * 100).toInt())
+        OcrModelState.Ready -> stringResource(R.string.settings_ocr_ready, size)
+        is OcrModelState.Failed -> stringResource(R.string.settings_ocr_failed)
+    }
+    val (actionLabel, action) = when (state) {
+        is OcrModelState.Downloading -> stringResource(R.string.action_cancel) to onCancel
+        OcrModelState.Ready -> stringResource(R.string.ocr_delete) to onDelete
+        else -> stringResource(R.string.ocr_models_download) to onDownload
+    }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .clickable(onClick = action)
+            .clearAndSetSemantics {
+                contentDescription = "$label, $value"
+                onClick(label = actionLabel.replaceFirstChar { it.lowercase() }) { action(); true }
+            }
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge)
+            Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text(actionLabel, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
     }
 }
 

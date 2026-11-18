@@ -15,6 +15,10 @@ import io.github.thomaszimmer13.xfiles.data.document.DocumentException
 import io.github.thomaszimmer13.xfiles.data.document.DocumentReader
 import io.github.thomaszimmer13.xfiles.data.document.LinkKind
 import io.github.thomaszimmer13.xfiles.data.document.PdfText
+import io.github.thomaszimmer13.xfiles.data.document.Linkifier
+import io.github.thomaszimmer13.xfiles.data.ocr.OcrModelState
+import io.github.thomaszimmer13.xfiles.data.ocr.OcrService
+import kotlinx.coroutines.isActive
 import io.github.thomaszimmer13.xfiles.ui.components.Announcer
 import io.github.thomaszimmer13.xfiles.ui.search.SearchViewModel
 import kotlinx.coroutines.Dispatchers
@@ -46,7 +50,13 @@ data class DocumentUiState(
     val currentMatch: Int = -1,
     /** Bloc où poser le focus (reprise, sommaire, recherche). */
     val focusBlock: Int? = null,
+    /** Reconnaissance de texte : en cours (page faite / total) ou terminée. */
+    val ocr: OcrRun? = null,
+    /** Les modèles de reconnaissance manquent : demander l'accord pour les télécharger. */
+    val askModels: Boolean = false,
 )
+
+data class OcrRun(val done: Int, val total: Int, val running: Boolean)
 
 class DocumentViewModel(application: Application) : AndroidViewModel(application) {
     private val preferences = (application as XFilesApplication).container.preferences
@@ -59,15 +69,44 @@ class DocumentViewModel(application: Application) : AndroidViewModel(application
     private var addressJob: Job? = null
     private var loadedStamp = 0L
     private val pdf by lazy { PdfText(getApplication()) }
+    private val ocrService = (application as XFilesApplication).container.ocr
+    val modelState = ocrService.state
+    val modelSize = ocrService.downloadSize
+    private var ocrJob: Job? = null
+    private var ocrPending = false
 
-    fun load(path: String, password: String? = null, force: Boolean = false) {
+    init {
+        // Modèles téléchargés pendant que le lecteur attendait : la reconnaissance démarre.
+        viewModelScope.launch {
+            ocrService.state.collect { s ->
+                if (s is OcrModelState.Ready && ocrPending) {
+                    ocrPending = false
+                    startOcr()
+                }
+                if (s is OcrModelState.Failed && ocrPending) {
+                    ocrPending = false
+                    announcer.announce(getApplication<Application>().getString(R.string.ocr_download_failed))
+                }
+            }
+        }
+    }
+
+    fun load(path: String, password: String? = null, force: Boolean = false, ocr: Boolean = false) {
         val stamp = File(path).lastModified()
         if (!force && _state.value.path == path && stamp == loadedStamp && (_state.value.document != null || _state.value.loading)) return
         loadedStamp = stamp
+        ocrJob?.cancel()
         _state.value = DocumentUiState(path = path)
         viewModelScope.launch {
             val app = getApplication<Application>()
             val file = File(path)
+            if (ocr || OcrService.isImage(file.name)) {
+                if (!showCachedOcr(file)) {
+                    _state.update { it.copy(loading = false) }
+                    startOcr()
+                }
+                return@launch
+            }
             try {
                 val doc = withContext(Dispatchers.IO) {
                     DocumentReader.read(file) { pdf.read(it, password) }
@@ -84,6 +123,7 @@ class DocumentViewModel(application: Application) : AndroidViewModel(application
             } catch (_: PdfText.PasswordRequired) {
                 _state.update { it.copy(loading = false, problem = if (password == null) DocProblem.PASSWORD else DocProblem.WRONG_PASSWORD) }
             } catch (e: DocumentException) {
+                if (e.message == "pdf-image" && showCachedOcr(file)) return@launch
                 _state.update { it.copy(loading = false, problem = if (e.message == "pdf-image") DocProblem.PDF_IMAGES else DocProblem.UNREADABLE) }
             } catch (_: java.io.FileNotFoundException) {
                 _state.update { it.copy(loading = false, problem = DocProblem.NOT_FOUND) }
@@ -93,6 +133,134 @@ class DocumentViewModel(application: Application) : AndroidViewModel(application
                 _state.update { it.copy(loading = false, problem = DocProblem.UNREADABLE) }
             }
         }
+    }
+
+    // --- Reconnaissance de texte (images, PDF scannés) ---
+
+    private fun ocrDocument(file: File, pages: List<List<String>>, total: Int): Document {
+        val isPdf = !OcrService.isImage(file.name)
+        val empty = getApplication<Application>().getString(R.string.ocr_page_empty)
+        val blocks = ArrayList<DocBlock>()
+        pages.forEachIndexed { i, paragraphs ->
+            if (isPdf) blocks += DocBlock.PageStart(i + 1)
+            if (paragraphs.isEmpty()) blocks += DocBlock.Paragraph(empty)
+            paragraphs.forEach { blocks += DocBlock.Paragraph(it, Linkifier.find(it)) }
+        }
+        return Document(file.name, blocks, pages = if (isPdf) total else 0)
+    }
+
+    private suspend fun showCachedOcr(file: File): Boolean {
+        val pages = withContext(Dispatchers.IO) { ocrService.cached(file) } ?: return false
+        val doc = ocrDocument(file, pages, pages.size)
+        normalized = doc.blocks.map { SearchViewModel.normalize(it.text) }
+        val resume = preferences.docPositions.first()[file.path]?.takeIf { it in doc.blocks.indices && it > 0 }
+        _state.update { it.copy(loading = false, document = doc, problem = null, ocr = OcrRun(pages.size, pages.size, false), focusBlock = resume) }
+        if (resume != null) announcer.announce(getApplication<Application>().getString(R.string.doc_resumed, sectionOf(doc, resume)))
+        findAddresses(doc)
+        return true
+    }
+
+    /** Lance la reconnaissance ; demande d'abord l'accord pour télécharger les modèles s'ils manquent. */
+    fun startOcr() {
+        val path = _state.value.path
+        if (path.isEmpty() || ocrJob?.isActive == true) return
+        if (ocrService.state.value !is OcrModelState.Ready) {
+            if (ocrService.state.value is OcrModelState.Downloading) ocrPending = true else _state.update { it.copy(askModels = true) }
+            return
+        }
+        val app = getApplication<Application>()
+        val file = File(path)
+        ocrJob = viewModelScope.launch {
+            val isImage = OcrService.isImage(file.name)
+            val total = try {
+                if (isImage) 1 else withContext(Dispatchers.IO) { ocrService.pdfPageCount(file) }
+            } catch (_: Exception) {
+                _state.update { it.copy(loading = false, problem = DocProblem.UNREADABLE) }
+                return@launch
+            }
+            _state.update { it.copy(loading = false, problem = null, ocr = OcrRun(0, total, true)) }
+            announcer.announce(
+                if (total == 1) app.getString(R.string.ocr_started_one) else app.resources.getQuantityString(R.plurals.ocr_started, total, total),
+            )
+            val pages = ArrayList<List<String>>()
+            val cancelled = { !isActive }
+            try {
+                for (i in 0 until total) {
+                    val page = if (isImage) ocrService.recognizeImage(file, cancelled) else ocrService.recognizePdfPage(file, i, cancelled)
+                    pages += page.paragraphs
+                    val doc = ocrDocument(file, pages, total)
+                    normalized = doc.blocks.map { SearchViewModel.normalize(it.text) }
+                    _state.update { it.copy(document = doc, ocr = OcrRun(i + 1, total, i + 1 < total)) }
+                    if (i == 0 && total > 1) announcer.announce(app.getString(R.string.ocr_first_page_ready))
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                _state.update { it.copy(ocr = it.ocr?.copy(running = false)) }
+                if (pages.isEmpty()) _state.update { it.copy(problem = DocProblem.UNREADABLE) }
+                announcer.announce(app.getString(R.string.ocr_failed))
+                return@launch
+            }
+            withContext(Dispatchers.IO) { ocrService.store(file, pages) }
+            val paragraphs = pages.sumOf { it.size }
+            announcer.announce(
+                when {
+                    paragraphs == 0 -> app.getString(R.string.ocr_nothing)
+                    total == 1 -> app.resources.getQuantityString(R.plurals.ocr_done_paragraphs, paragraphs, paragraphs)
+                    else -> app.resources.getQuantityString(R.plurals.ocr_done_pages, total, total)
+                },
+            )
+            _state.value.document?.let { findAddresses(it) }
+        }
+    }
+
+    fun stopOcr(silent: Boolean = false) {
+        if (ocrJob?.isActive == true) {
+            ocrJob?.cancel()
+            _state.update { it.copy(ocr = it.ocr?.copy(running = false)) }
+            if (!silent) announcer.announce(getApplication<Application>().getString(R.string.ocr_stopped))
+        }
+        ocrPending = false
+    }
+
+    fun cancelDownload() {
+        ocrPending = false
+        ocrService.cancelDownload()
+    }
+
+    fun acceptModels() {
+        _state.update { it.copy(askModels = false) }
+        ocrPending = true
+        ocrService.download()
+        announcer.announce(getApplication<Application>().getString(R.string.ocr_download_started))
+    }
+
+    fun declineModels() = _state.update { it.copy(askModels = false) }
+
+    /** Enregistre le texte reconnu à côté du fichier : « nom.txt » (ou « nom (2).txt »). */
+    fun saveRecognizedText() {
+        val doc = _state.value.document ?: return
+        val source = File(_state.value.path)
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val text = doc.blocks.joinToString("\n\n") { b ->
+                if (b is DocBlock.PageStart) app.getString(R.string.ocr_page_marker, b.number) else b.text
+            }
+            val target = withContext(Dispatchers.IO) {
+                val base = source.nameWithoutExtension
+                var f = File(source.parentFile, "$base.txt")
+                var n = 2
+                while (f.exists()) f = File(source.parentFile, "$base (${n++}).txt")
+                runCatching { f.writeText(text + "\n") }.map { f }.getOrNull()
+            }
+            announcer.announce(
+                if (target != null) app.getString(R.string.ocr_saved, target.name) else app.getString(R.string.editor_save_failed),
+            )
+        }
+    }
+
+    override fun onCleared() {
+        ocrJob?.cancel()
     }
 
     /** « section Chapitre 2 » ou « page 4 » : où se trouve le bloc [index]. */

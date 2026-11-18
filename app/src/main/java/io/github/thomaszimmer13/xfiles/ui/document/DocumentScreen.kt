@@ -28,6 +28,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -35,6 +36,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -51,7 +53,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
@@ -77,6 +81,7 @@ import io.github.thomaszimmer13.xfiles.data.document.DocLink
 import io.github.thomaszimmer13.xfiles.data.document.Document
 import io.github.thomaszimmer13.xfiles.data.document.DocumentReader
 import io.github.thomaszimmer13.xfiles.data.document.LinkKind
+import io.github.thomaszimmer13.xfiles.data.ocr.OcrModelState
 import io.github.thomaszimmer13.xfiles.ui.browser.Routes
 import io.github.thomaszimmer13.xfiles.ui.components.FocusOnceEffect
 import io.github.thomaszimmer13.xfiles.ui.components.PasswordDialog
@@ -98,8 +103,17 @@ private class BlockA11y(val spoken: String?, val actions: List<Pair<String, () -
  */
 @OptIn(FlowPreview::class)
 @Composable
-fun DocumentScreen(path: String, onOpen: (String) -> Unit, onBack: () -> Unit, viewModel: DocumentViewModel = viewModel(key = "doc:$path")) {
-    LaunchedEffect(path) { viewModel.load(path) }
+fun DocumentScreen(
+    path: String,
+    onOpen: (String) -> Unit,
+    onBack: () -> Unit,
+    ocr: Boolean = false,
+    viewModel: DocumentViewModel = viewModel(key = "doc:$path:$ocr"),
+) {
+    LaunchedEffect(path) { viewModel.load(path, ocr = ocr) }
+    // En quittant le lecteur, la reconnaissance en cours s'arrête.
+    DisposableEffect(viewModel) { onDispose { viewModel.stopOcr(silent = true) } }
+    val modelState by viewModel.modelState.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val scale by viewModel.textScale.collectAsStateWithLifecycle()
     val announcement by viewModel.announcer.message.collectAsStateWithLifecycle()
@@ -193,6 +207,12 @@ fun DocumentScreen(path: String, onOpen: (String) -> Unit, onBack: () -> Unit, v
                     if (doc != null && DocumentReader.editable(file.name)) {
                         DropdownMenuItem(text = { Text(stringResource(R.string.doc_edit)) }, onClick = { menu = false; onOpen(Routes.editor(path)) })
                     }
+                    state.ocr?.takeIf { !it.running && it.done < it.total }?.let {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.ocr_restart)) }, onClick = { menu = false; viewModel.startOcr() })
+                    }
+                    if (doc != null && state.ocr?.running == false) {
+                        DropdownMenuItem(text = { Text(stringResource(R.string.ocr_save_text)) }, onClick = { menu = false; viewModel.saveRecognizedText() })
+                    }
                     DropdownMenuItem(text = { Text(stringResource(R.string.action_open_with)) }, onClick = { menu = false; launcher.openWith(path, file.name) })
                     DropdownMenuItem(text = { Text(stringResource(R.string.action_share)) }, onClick = { menu = false; launcher.share(path, file.name) })
                 }
@@ -213,6 +233,23 @@ fun DocumentScreen(path: String, onOpen: (String) -> Unit, onBack: () -> Unit, v
 
         StatusMessage(announcement)
 
+        (modelState as? OcrModelState.Downloading)?.let { d ->
+            ProgressLine(
+                label = stringResource(R.string.ocr_downloading, (d.fraction * 100).toInt()),
+                fraction = d.fraction,
+                action = stringResource(R.string.action_cancel),
+                onAction = viewModel::cancelDownload,
+            )
+        }
+        state.ocr?.takeIf { it.running }?.let { run ->
+            ProgressLine(
+                label = if (run.total == 1) stringResource(R.string.ocr_running_one) else stringResource(R.string.ocr_running, run.done + 1, run.total),
+                fraction = if (run.total == 1) null else run.done.toFloat() / run.total,
+                action = stringResource(R.string.ocr_stop),
+                onAction = { viewModel.stopOcr() },
+            )
+        }
+
         when {
             state.loading -> Column(Modifier.fillMaxWidth().padding(32.dp), horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
                 CircularProgressIndicator()
@@ -231,12 +268,30 @@ fun DocumentScreen(path: String, onOpen: (String) -> Unit, onBack: () -> Unit, v
                     }
                 }
             }
+            state.problem == null -> if (state.ocr?.running != true) {
+                Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.ocr_needed), style = MaterialTheme.typography.bodyLarge)
+                    Button(onClick = viewModel::startOcr) { Text(stringResource(R.string.ocr_start)) }
+                    OutlinedButton(onClick = { launcher.openWith(path, file.name) }) { Text(stringResource(R.string.action_open_with)) }
+                }
+            }
             else -> ProblemView(
                 problem = state.problem,
                 onOpenWith = { launcher.openWith(path, file.name) },
+                onRecognize = viewModel::startOcr,
                 onBack = onBack,
             )
         }
+    }
+
+    if (state.askModels) {
+        AlertDialog(
+            onDismissRequest = viewModel::declineModels,
+            title = { Text(stringResource(R.string.ocr_models_title), modifier = Modifier.semantics { heading() }) },
+            text = { Text(stringResource(R.string.ocr_models_message, android.text.format.Formatter.formatShortFileSize(context, viewModel.modelSize))) },
+            confirmButton = { TextButton(onClick = viewModel::acceptModels) { Text(stringResource(R.string.ocr_models_download)) } },
+            dismissButton = { TextButton(onClick = viewModel::declineModels) { Text(stringResource(R.string.action_cancel)) } },
+        )
     }
 
     if (state.problem == DocProblem.PASSWORD || state.problem == DocProblem.WRONG_PASSWORD) {
@@ -527,7 +582,7 @@ private fun SearchBar(
 }
 
 @Composable
-private fun ProblemView(problem: DocProblem?, onOpenWith: () -> Unit, onBack: () -> Unit) {
+private fun ProblemView(problem: DocProblem?, onOpenWith: () -> Unit, onRecognize: () -> Unit, onBack: () -> Unit) {
     val message = when (problem) {
         DocProblem.NOT_FOUND -> stringResource(R.string.doc_problem_not_found)
         DocProblem.PDF_IMAGES -> stringResource(R.string.doc_problem_pdf_images)
@@ -536,8 +591,33 @@ private fun ProblemView(problem: DocProblem?, onOpenWith: () -> Unit, onBack: ()
     }
     Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(message, style = MaterialTheme.typography.bodyLarge)
-        if (problem != DocProblem.NOT_FOUND) Button(onClick = onOpenWith) { Text(stringResource(R.string.action_open_with)) }
+        if (problem == DocProblem.PDF_IMAGES) Button(onClick = onRecognize) { Text(stringResource(R.string.ocr_start)) }
+        if (problem != DocProblem.NOT_FOUND) OutlinedButton(onClick = onOpenWith) { Text(stringResource(R.string.action_open_with)) }
         OutlinedButton(onClick = onBack) { Text(stringResource(R.string.action_back)) }
+    }
+}
+
+/** Barre de progression lue comme un seul élément : « Page 3 sur 12 », avec son bouton à côté. */
+@Composable
+private fun ProgressLine(label: String, fraction: Float?, action: String, onAction: () -> Unit) {
+    Row(
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+    ) {
+        Column(
+            Modifier.weight(1f).semantics(mergeDescendants = true) {
+                contentDescription = label
+                if (fraction != null) progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f)
+            },
+        ) {
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+            if (fraction != null) {
+                LinearProgressIndicator(progress = { fraction }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
+            } else {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
+            }
+        }
+        TextButton(onClick = onAction) { Text(action) }
     }
 }
 

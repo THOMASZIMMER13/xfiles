@@ -15,3 +15,6 @@
 -keep class com.tom_roush.pdfbox.** { *; }
 -keep class com.tom_roush.fontbox.** { *; }
 -keep class com.tom_roush.harmony.** { *; }
+
+# ONNX Runtime : la bibliothèque native appelle les classes Java par leur nom (JNI).
+-keep class ai.onnxruntime.** { *; }

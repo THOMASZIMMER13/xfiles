@@ -677,4 +677,49 @@
     <string name="editor_too_big">Ce fichier dépasse 2 mégaoctets : trop gros pour l\'éditeur. Il reste lisible dans le lecteur de documents.</string>
     <string name="editor_unsaved_title">Modifications non enregistrées</string>
     <string name="editor_unsaved_message">Enregistrer les modifications de « %1$s » avant de quitter ?</string>
+    <!-- Reconnaissance de texte -->
+    <string name="ocr_action">Reconnaître le texte</string>
+    <string name="ocr_start">Reconnaître le texte</string>
+    <string name="ocr_restart">Reprendre la reconnaissance</string>
+    <string name="ocr_stop">Arrêter</string>
+    <string name="ocr_needed">Le texte de ce fichier n\'est pas lisible directement : c\'est une image. XFiles peut le reconnaître, sur le téléphone, sans rien envoyer sur Internet.</string>
+    <string name="ocr_running_one">Reconnaissance du texte en cours…</string>
+    <string name="ocr_running">Reconnaissance du texte : page %1$d sur %2$d</string>
+    <string name="ocr_started_one">Reconnaissance du texte en cours.</string>
+    <plurals name="ocr_started">
+        <item quantity="one">Reconnaissance du texte, %1$d page.</item>
+        <item quantity="many">Reconnaissance du texte, %1$d pages.</item>
+        <item quantity="other">Reconnaissance du texte, %1$d pages.</item>
+    </plurals>
+    <string name="ocr_first_page_ready">Première page prête : vous pouvez commencer la lecture pendant que la suite est reconnue.</string>
+    <plurals name="ocr_done_paragraphs">
+        <item quantity="one">Texte reconnu : %1$d paragraphe.</item>
+        <item quantity="many">Texte reconnu : %1$d paragraphes.</item>
+        <item quantity="other">Texte reconnu : %1$d paragraphes.</item>
+    </plurals>
+    <plurals name="ocr_done_pages">
+        <item quantity="one">Reconnaissance terminée : %1$d page.</item>
+        <item quantity="many">Reconnaissance terminée : %1$d pages.</item>
+        <item quantity="other">Reconnaissance terminée : %1$d pages.</item>
+    </plurals>
+    <string name="ocr_nothing">Aucun texte trouvé.</string>
+    <string name="ocr_page_empty">Aucun texte reconnu sur cette page.</string>
+    <string name="ocr_stopped">Reconnaissance arrêtée.</string>
+    <string name="ocr_failed">La reconnaissance du texte a échoué.</string>
+    <string name="ocr_save_text">Enregistrer le texte</string>
+    <string name="ocr_saved">Texte enregistré : %1$s.</string>
+    <string name="ocr_page_marker">Page %1$d</string>
+    <string name="ocr_models_title">Télécharger la reconnaissance de texte ?</string>
+    <string name="ocr_models_message">La reconnaissance de texte a besoin de modèles de %1$s, téléchargés une seule fois. Ensuite tout se fait sur le téléphone : aucune image n\'est envoyée sur Internet.</string>
+    <string name="ocr_models_download">Télécharger</string>
+    <string name="ocr_download_started">Téléchargement des modèles de reconnaissance.</string>
+    <string name="ocr_download_failed">Le téléchargement des modèles a échoué. Vérifiez la connexion et réessayez.</string>
+    <string name="ocr_downloading">Téléchargement des modèles : %1$d %%</string>
+    <string name="settings_ocr">Reconnaissance de texte</string>
+    <string name="settings_ocr_missing">Non installée (%1$s à télécharger)</string>
+    <string name="settings_ocr_ready">Installée, %1$s</string>
+    <string name="settings_ocr_failed">Échec du téléchargement</string>
+    <string name="ocr_delete">Supprimer</string>
+    <string name="ocr_delete_title">Supprimer la reconnaissance de texte ?</string>
+    <string name="ocr_delete_message">Les modèles et les textes déjà reconnus seront effacés. Vous pourrez les retélécharger plus tard.</string>
 </resources>

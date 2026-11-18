@@ -63,7 +63,19 @@ android {
         unitTests.isIncludeAndroidResources = true
     }
 
+    // Un APK par processeur (plus léger : ONNX Runtime pèse lourd) et un APK universel.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a")
+            isUniversalApk = true
+        }
+    }
+
     packaging {
+        // Bibliothèques natives compressées dans l'APK : téléchargement deux fois plus léger.
+        jniLibs.useLegacyPackaging = true
         resources.excludes += setOf("META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*")
         // Données de cryptographie post-quantique de Bouncy Castle (dépendance de pdfbox), inutiles ici.
         resources.excludes += "org/bouncycastle/pqc/**"
@@ -100,11 +112,21 @@ dependencies {
     implementation(libs.jsoup)
     implementation(libs.pdfbox.android)
 
+    // Reconnaissance de texte : ONNX Runtime (MIT) fait tourner les modèles PaddleOCR (Apache 2.0).
+    implementation(libs.onnxruntime.android)
+
     testImplementation(libs.junit)
+    // Tests du moteur de reconnaissance sur la JVM : même API, bibliothèque native pour PC.
+    testImplementation(libs.onnxruntime.jvm)
     // Tests d'accessibilité de l'interface sur la JVM (Robolectric) : structure lue par TalkBack.
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
     testImplementation(platform(libs.androidx.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)
     debugImplementation(libs.compose.ui.test.manifest)
+}
+
+// Les tests JVM utilisent ONNX Runtime pour PC, pas la version Android (bibliothèques natives ARM).
+configurations.matching { it.name.endsWith("UnitTestRuntimeClasspath") }.configureEach {
+    exclude(group = "com.microsoft.onnxruntime", module = "onnxruntime-android")
 }
