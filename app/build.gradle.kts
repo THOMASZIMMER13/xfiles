@@ -20,6 +20,10 @@ android {
         versionName = System.getenv("XFILES_VERSION_NAME") ?: "1.0.0-dev"
         // Décodeur FFmpeg : seulement les processeurs des téléphones (ARM). Sur un émulateur x86,
         // le lecteur fonctionne sans FFmpeg.
+        // Stockage en ligne : identifiants publics des applications Dropbox et Microsoft (pas des
+        // secrets), fournis par la CI. Vides : le service est indiqué comme non disponible.
+        buildConfigField("String", "DROPBOX_APP_KEY", "\"${System.getenv("XFILES_DROPBOX_KEY").orEmpty()}\"")
+        buildConfigField("String", "ONEDRIVE_CLIENT_ID", "\"${System.getenv("XFILES_ONEDRIVE_ID").orEmpty()}\"")
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
@@ -38,8 +42,13 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            // Retour de connexion propre à chaque version installée (pas de choix entre deux apps).
+            manifestPlaceholders["oauthScheme"] = "xfiles-auth-debug"
+            buildConfigField("String", "OAUTH_SCHEME", "\"xfiles-auth-debug\"")
         }
         release {
+            manifestPlaceholders["oauthScheme"] = "xfiles-auth"
+            buildConfigField("String", "OAUTH_SCHEME", "\"xfiles-auth\"")
             // R8 : code et ressources inutilisés retirés, APK plus léger et plus rapide.
             isMinifyEnabled = true
             isShrinkResources = true
@@ -57,6 +66,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     testOptions {
@@ -123,6 +133,10 @@ dependencies {
     implementation(libs.commons.net)
     implementation(libs.okhttp)
 
+    // Stockage en ligne : Google Drive, Dropbox, OneDrive (API web, connexion OAuth).
+    implementation(libs.play.services.auth)
+    implementation(libs.androidx.browser)
+
     // Reconnaissance de texte : ONNX Runtime (MIT) fait tourner les modèles PaddleOCR (Apache 2.0).
     implementation(libs.onnxruntime.android)
 
@@ -132,6 +146,8 @@ dependencies {
     implementation(libs.camera.view)
 
     testImplementation(libs.junit)
+    testImplementation(libs.mockwebserver)
+    testImplementation(libs.org.json)
     // Tests du moteur de reconnaissance sur la JVM : même API, bibliothèque native pour PC.
     testImplementation(libs.onnxruntime.jvm)
     // Tests d'accessibilité de l'interface sur la JVM (Robolectric) : structure lue par TalkBack.

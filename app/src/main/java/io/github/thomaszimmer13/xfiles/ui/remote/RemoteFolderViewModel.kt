@@ -249,16 +249,16 @@ class RemoteFolderViewModel(application: Application) : AndroidViewModel(applica
         return File(file.parentFile, name)
     }
 
-    fun errorText(e: Throwable): String = remoteErrorText(getApplication(), e)
+    fun errorText(e: Throwable): String = remoteErrorText(getApplication(), e, _state.value.server?.protocol?.cloud == true)
 }
 
 /** Message d'erreur annoncé pour une opération distante. */
-fun remoteErrorText(app: Application, e: Throwable): String = when (e) {
+fun remoteErrorText(app: Application, e: Throwable, cloud: Boolean = false): String = when (e) {
     is HostKeyException -> app.getString(R.string.remote_host_key_changed)
     is RemoteException -> app.getString(
         when (e.reason) {
             RemoteException.Reason.UNREACHABLE -> R.string.remote_error_unreachable
-            RemoteException.Reason.AUTH -> R.string.remote_error_auth
+            RemoteException.Reason.AUTH -> if (cloud) R.string.remote_error_auth_cloud else R.string.remote_error_auth
             RemoteException.Reason.NOT_FOUND -> R.string.remote_error_not_found
             RemoteException.Reason.DENIED -> R.string.remote_error_denied
             RemoteException.Reason.EXISTS -> R.string.remote_error_exists

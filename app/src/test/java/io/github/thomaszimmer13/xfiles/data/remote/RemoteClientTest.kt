@@ -30,7 +30,7 @@ class RemoteClientTest {
         Protocol.SMB -> RemoteServer("m", p, "smb", "127.0.0.1", 4445, "Partage", "xtest", password)
         Protocol.FTP -> RemoteServer("f", p, "ftp", "127.0.0.1", 2121, "", "xtest", password)
         Protocol.WEBDAV -> RemoteServer("w", p, "dav", "127.0.0.1", 8080, "/dav", "xtest", password, secure = false)
-        Protocol.FTPS -> error("non testé")
+        else -> error("non testé ici")
     }
 
     private fun scenario(server: RemoteServer) {

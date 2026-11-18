@@ -147,6 +147,15 @@ fun ExplorerRootScreen(
             items(state.servers, key = { "srv:" + it.id }) { server ->
                 ServerRow(server, focusFor("srv:" + server.id), onOpen)
             }
+            item(key = "add-cloud") {
+                SimpleRow(
+                    icon = R.drawable.ic_cloud,
+                    title = stringResource(R.string.cloud_add),
+                    detail = stringResource(R.string.cloud_add_detail),
+                    focusRequester = focusFor("add-cloud"),
+                    onClick = { onOpen(io.github.thomaszimmer13.xfiles.ui.browser.Routes.cloudAdd()) },
+                )
+            }
             item(key = "add-server") {
                 SimpleRow(
                     icon = R.drawable.ic_add,
@@ -301,12 +310,19 @@ private fun ServerRow(server: io.github.thomaszimmer13.xfiles.data.remote.Remote
             io.github.thomaszimmer13.xfiles.data.remote.Protocol.FTP -> R.string.protocol_ftp_short
             io.github.thomaszimmer13.xfiles.data.remote.Protocol.FTPS -> R.string.protocol_ftps_short
             io.github.thomaszimmer13.xfiles.data.remote.Protocol.WEBDAV -> R.string.protocol_webdav_short
+            io.github.thomaszimmer13.xfiles.data.remote.Protocol.GDRIVE -> R.string.protocol_gdrive
+            io.github.thomaszimmer13.xfiles.data.remote.Protocol.DROPBOX -> R.string.protocol_dropbox
+            io.github.thomaszimmer13.xfiles.data.remote.Protocol.ONEDRIVE -> R.string.protocol_onedrive
         },
     )
-    val detail = "$protocol, ${server.host}" + server.basePath.takeIf { it.isNotEmpty() }?.let { " " + it.trim('/') }.orEmpty()
+    val detail = if (server.protocol.cloud) {
+        if (server.name == protocol) server.username else "$protocol, ${server.username}"
+    } else {
+        "$protocol, ${server.host}" + server.basePath.takeIf { it.isNotEmpty() }?.let { " " + it.trim('/') }.orEmpty()
+    }
     val open = { onOpen(io.github.thomaszimmer13.xfiles.ui.browser.Routes.remote(server.id)) }
     RootRow(
-        icon = R.drawable.ic_server,
+        icon = if (server.protocol.cloud) R.drawable.ic_cloud else R.drawable.ic_server,
         title = server.name,
         detail = detail,
         focusRequester = focusRequester,

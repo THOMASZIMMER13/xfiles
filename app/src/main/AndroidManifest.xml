@@ -58,6 +58,21 @@
             </intent-filter>
         </activity>
 
+        <!-- Retour de la connexion Dropbox / OneDrive dans le navigateur. -->
+        <activity
+            android:name=".OAuthRedirectActivity"
+            android:exported="true"
+            android:noHistory="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="${oauthScheme}" />
+            </intent-filter>
+        </activity>
+
         <service
             android:name=".data.transfer.TransferService"
             android:exported="false"

@@ -17,6 +17,9 @@ jobs:
       XFILES_VERSION_CODE: ${{ github.run_number }}
       # Sur un tag v1.2.3 → 1.2.3 ; sinon dev-<sha court>
       XFILES_VERSION_NAME: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('dev-{0}', github.sha) }}
+      # Stockage en ligne : identifiants publics des applications Dropbox et Microsoft (variables du dépôt).
+      XFILES_DROPBOX_KEY: ${{ vars.XFILES_DROPBOX_KEY }}
+      XFILES_ONEDRIVE_ID: ${{ vars.XFILES_ONEDRIVE_ID }}
 
     steps:
       - uses: actions/checkout@v5

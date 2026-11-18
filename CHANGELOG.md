@@ -68,6 +68,12 @@ Première version publique : un gestionnaire de fichiers pensé d'abord pour Tal
 - Actions : Télécharger dans Téléchargements (dossiers compris), Renommer, Supprimer du serveur, Nouveau dossier ; « Envoyer ici » envoie le presse-papiers d'XFiles.
 - Transferts avec avancement et Annuler ; connexion rouverte toute seule après une coupure.
 
+### Comptes en ligne
+- « Ajouter un compte en ligne » : Google Drive (compte Google du téléphone), Dropbox et OneDrive (page de connexion dans le navigateur, retour automatique dans XFiles).
+- Mêmes actions que pour un serveur : parcourir, ouvrir, télécharger, envoyer, renommer, supprimer (corbeille du service), nouveau dossier.
+- Google Docs, Sheets, Slides et Drawings apparaissent en .docx, .xlsx, .pptx et .pdf, et s'ouvrent dans ces formats.
+- Gros fichiers envoyés en plusieurs morceaux ; jetons d'accès chiffrés par le Keystore d'Android ; « Reconnecter le compte » si l'accès est retiré.
+
 ### Renommage par lot
 - Depuis la sélection : bouton « Renommer ».
 - Rechercher et remplacer (texte ou expression régulière, avec groupes $1…), ou modèle avec balises {nom}, {n}, {date}, {ext} ; numéro de départ et nombre de chiffres.
