@@ -20,6 +20,7 @@ jsoup = "1.24.1"
 pdfbox = "2.0.27.0"
 # Reconnaissance de texte (modèles PaddleOCR PP-OCRv5, téléchargés à la première utilisation).
 onnxruntime = "1.31.1"
+camerax = "1.6.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -42,6 +43,9 @@ media3-ffmpeg-decoder = { group = "org.jellyfin.media3", name = "media3-ffmpeg-d
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
 onnxruntime-jvm = { group = "com.microsoft.onnxruntime", name = "onnxruntime", version.ref = "onnxruntime" }
+camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
+camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
+camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
 pdfbox-android = { group = "com.tom-roush", name = "pdfbox-android", version.ref = "pdfbox" }
 commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "commonsCompress" }
 xz = { group = "org.tukaani", name = "xz", version.ref = "xz" }

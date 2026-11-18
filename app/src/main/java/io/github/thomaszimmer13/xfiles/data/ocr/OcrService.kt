@@ -169,6 +169,12 @@ class OcrService(context: Context, private val scope: CoroutineScope) {
         withEngine { it.recognize(image, cancelled) }
     }
 
+    /** Détection seule, rapide (aperçu du scanner) : rectangles des lignes de texte. */
+    suspend fun detect(bitmap: Bitmap, maxSide: Int = 640): List<OrientedBox> = withContext(Dispatchers.Default) {
+        val image = bitmap.toRgbImage()
+        withEngine { it.detect(image, maxSide) }
+    }
+
     /** Photo ou capture d'écran, redressée selon ses informations EXIF. */
     suspend fun recognizeImage(file: File, cancelled: () -> Boolean = { false }): OcrPage {
         val bitmap = withContext(Dispatchers.IO) { decodeImage(file) } ?: throw IOException("image")

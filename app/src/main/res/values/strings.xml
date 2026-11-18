@@ -722,4 +722,60 @@
     <string name="ocr_delete">Supprimer</string>
     <string name="ocr_delete_title">Supprimer la reconnaissance de texte ?</string>
     <string name="ocr_delete_message">Les modèles et les textes déjà reconnus seront effacés. Vous pourrez les retélécharger plus tard.</string>
+    <!-- Scanner -->
+    <string name="create_menu">Créer</string>
+    <string name="scan_menu">Scanner un document</string>
+    <string name="scan_title">Scanner</string>
+    <plurals name="scan_title_pages">
+        <item quantity="one">Scanner, %1$d page</item>
+        <item quantity="many">Scanner, %1$d pages</item>
+        <item quantity="other">Scanner, %1$d pages</item>
+    </plurals>
+    <string name="scan_camera_needed">Le scanner a besoin de la caméra. Elle ne sert qu\'ici, et les photos restent sur le téléphone.</string>
+    <string name="scan_allow_camera">Autoriser la caméra</string>
+    <string name="scan_aim">Tenez le téléphone à plat, à une trentaine de centimètres au-dessus de la page.</string>
+    <string name="scan_no_text">Aucun texte visible. Visez la page, à une trentaine de centimètres.</string>
+    <string name="scan_cut_top">Texte coupé en haut : déplacez le téléphone vers le haut de la page.</string>
+    <string name="scan_cut_bottom">Texte coupé en bas : déplacez le téléphone vers le bas de la page.</string>
+    <string name="scan_cut_left">Texte coupé à gauche : déplacez le téléphone vers la gauche.</string>
+    <string name="scan_cut_right">Texte coupé à droite : déplacez le téléphone vers la droite.</string>
+    <string name="scan_move_back">Trop près : éloignez le téléphone de la page.</string>
+    <string name="scan_move_closer">Trop loin : rapprochez le téléphone de la page.</string>
+    <string name="scan_ready">Page bien cadrée. Vous pouvez prendre la photo.</string>
+    <string name="scan_ready_auto">Page bien cadrée, ne bougez plus.</string>
+    <string name="scan_captured">Photo prise. Reconnaissance du texte…</string>
+    <string name="scan_processing">Reconnaissance du texte…</string>
+    <string name="scan_page_added">Page %1$d ajoutée : %2$s… Placez la page suivante, ou touchez Terminer.</string>
+    <string name="scan_page_added_empty">Page %1$d ajoutée, mais aucun texte n\'a été reconnu. Vous pouvez la supprimer et recommencer.</string>
+    <string name="scan_capture_failed">La photo n\'a pas pu être prise.</string>
+    <string name="scan_take_photo">Prendre la photo</string>
+    <string name="scan_finish">Terminer</string>
+    <plurals name="scan_finish_pages">
+        <item quantity="one">Terminer (%1$d page)</item>
+        <item quantity="many">Terminer (%1$d pages)</item>
+        <item quantity="other">Terminer (%1$d pages)</item>
+    </plurals>
+    <string name="scan_auto">Photo automatique</string>
+    <string name="scan_torch">Lampe</string>
+    <string name="scan_remove_last">Supprimer la dernière page</string>
+    <plurals name="scan_page_removed">
+        <item quantity="one">Dernière page supprimée. Il reste %1$d page.</item>
+        <item quantity="many">Dernière page supprimée. Il reste %1$d pages.</item>
+        <item quantity="other">Dernière page supprimée. Il reste %1$d pages.</item>
+    </plurals>
+    <string name="scan_saving">Enregistrement du PDF…</string>
+    <plurals name="scan_saved">
+        <item quantity="one">%1$s enregistré, %2$d page. Ouverture dans le lecteur.</item>
+        <item quantity="many">%1$s enregistré, %2$d pages. Ouverture dans le lecteur.</item>
+        <item quantity="other">%1$s enregistré, %2$d pages. Ouverture dans le lecteur.</item>
+    </plurals>
+    <string name="scan_save_failed">Le PDF n\'a pas pu être enregistré.</string>
+    <string name="scan_leave_title">Quitter le scanner ?</string>
+    <plurals name="scan_leave_message">
+        <item quantity="one">%1$d page scannée n\'est pas encore enregistrée.</item>
+        <item quantity="many">%1$d pages scannées ne sont pas encore enregistrées.</item>
+        <item quantity="other">%1$d pages scannées ne sont pas encore enregistrées.</item>
+    </plurals>
+    <string name="scan_save">Enregistrer le PDF</string>
+    <string name="scan_discard">Abandonner</string>
 </resources>

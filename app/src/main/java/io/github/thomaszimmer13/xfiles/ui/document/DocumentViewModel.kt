@@ -100,6 +100,8 @@ class DocumentViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             val app = getApplication<Application>()
             val file = File(path)
+            // PDF scanné par XFiles (ou déjà reconnu) : le texte reconnu, mieux découpé que la couche PDF.
+            if (file.name.endsWith(".pdf", ignoreCase = true) && password == null && showCachedOcr(file)) return@launch
             if (ocr || OcrService.isImage(file.name)) {
                 if (!showCachedOcr(file)) {
                     _state.update { it.copy(loading = false) }

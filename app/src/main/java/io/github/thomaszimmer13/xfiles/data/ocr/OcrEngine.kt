@@ -84,8 +84,8 @@ class OcrEngine(detModel: File, recModel: File, private val dictionary: List<Str
 
     // --- Détection ---
 
-    fun detect(image: RgbImage): List<OrientedBox> {
-        val (w, h) = RgbImage.fitted(image.width, image.height, DET_MAX_SIDE, 32)
+    fun detect(image: RgbImage, maxSide: Int = DET_MAX_SIDE): List<OrientedBox> {
+        val (w, h) = RgbImage.fitted(image.width, image.height, maxSide, 32)
         val small = image.resized(w, h)
         val input = FloatBuffer.allocate(3 * w * h)
         val plane = w * h

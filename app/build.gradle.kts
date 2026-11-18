@@ -115,6 +115,11 @@ dependencies {
     // Reconnaissance de texte : ONNX Runtime (MIT) fait tourner les modèles PaddleOCR (Apache 2.0).
     implementation(libs.onnxruntime.android)
 
+    // Scanner de documents : caméra (CameraX).
+    implementation(libs.camera.camera2)
+    implementation(libs.camera.lifecycle)
+    implementation(libs.camera.view)
+
     testImplementation(libs.junit)
     // Tests du moteur de reconnaissance sur la JVM : même API, bibliothèque native pour PC.
     testImplementation(libs.onnxruntime.jvm)

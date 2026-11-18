@@ -67,6 +67,13 @@ Première version publique : un gestionnaire de fichiers pensé d'abord pour Tal
 - Résultat dans le lecteur de documents (recherche, liens, numéros, copier) ; on lit la première page pendant que la suite est reconnue ; « Enregistrer le texte » crée un .txt à côté ; résultat gardé en cache.
 - Réglages : état des modèles, téléchargement, suppression.
 
+### Scanner de documents
+- Bouton « Créer » des dossiers (regroupe Nouveau dossier, Nouveau fichier texte et Scanner un document).
+- Guidage vocal pendant le cadrage, d'après le texte vu par la caméra : « Texte coupé en haut », « Trop près », « Trop loin », « Page bien cadrée, ne bougez plus » ; annonce seulement quand le conseil change.
+- Photo automatique quand la page est bien cadrée et immobile (désactivable), bouton « Prendre la photo », lampe.
+- Plusieurs pages ; chaque page est reconnue aussitôt et son début annoncé ; « Supprimer la dernière page ».
+- « Terminer » : PDF cherchable (photo + texte invisible) enregistré dans le dossier, ouvert aussitôt dans le lecteur.
+
 ### Réglages
 - Confirmation avant la corbeille (désactivable), fichiers cachés, informations sur la version et la licence.
 - Annoncer la position dans les listes (« 3 sur 12 »), sons de confirmation discrets (réussite, échec), tous deux désactivables.

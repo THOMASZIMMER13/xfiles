@@ -19,6 +19,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -106,6 +108,7 @@ fun FolderScreen(
     var playlistPath by rememberSaveable { mutableStateOf<String?>(null) }
     var showNewFolderDialog by rememberSaveable { mutableStateOf(false) }
     var showNewTextDialog by rememberSaveable { mutableStateOf(false) }
+    var showCreateMenu by remember { mutableStateOf(false) }
     // Chemin de l'élément en cours de renommage (null = dialogue fermé).
     var renamePath by rememberSaveable { mutableStateOf<String?>(null) }
     // Chemin de l'élément dont la mise à la corbeille est à confirmer.
@@ -228,11 +231,16 @@ fun FolderScreen(
                 onBack = onBack,
                 titleFocus = titleFocus,
                 actions = {
-                    IconButton(onClick = { showNewFolderDialog = true }) {
-                        Icon(painterResource(R.drawable.ic_new_folder), contentDescription = stringResource(R.string.new_folder_title))
-                    }
-                    IconButton(onClick = { showNewTextDialog = true }) {
-                        Icon(painterResource(R.drawable.ic_document), contentDescription = stringResource(R.string.new_text_title))
+                    // « Créer » : nouveau dossier, fichier texte, scan (une seule icône, barre moins chargée).
+                    Box {
+                        IconButton(onClick = { showCreateMenu = true }) {
+                            Icon(painterResource(R.drawable.ic_add), contentDescription = stringResource(R.string.create_menu))
+                        }
+                        DropdownMenu(expanded = showCreateMenu, onDismissRequest = { showCreateMenu = false }) {
+                            DropdownMenuItem(text = { Text(stringResource(R.string.new_folder_title)) }, onClick = { showCreateMenu = false; showNewFolderDialog = true })
+                            DropdownMenuItem(text = { Text(stringResource(R.string.new_text_title)) }, onClick = { showCreateMenu = false; showNewTextDialog = true })
+                            DropdownMenuItem(text = { Text(stringResource(R.string.scan_menu)) }, onClick = { showCreateMenu = false; onOpen(Routes.scanner(path)) })
+                        }
                     }
                     IconButton(onClick = { onOpen(Routes.search(path)) }) {
                         Icon(painterResource(R.drawable.ic_search), contentDescription = stringResource(R.string.action_search))
