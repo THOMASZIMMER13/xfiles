@@ -94,4 +94,23 @@ class LocalTrashTest {
     fun missingFile() {
         trash.moveToTrash(File(internal, "absent.txt").path)
     }
+
+    /** Audit F-06 : un chemin d'origine trafiqué ne fait pas sortir l'élément de son volume. */
+    @Test fun restoreStaysOnTheSameVolume() {
+        val f = file(internal, "Documents/Note.txt")
+        val entry = trash.moveToTrash(f.path)
+        assertTrue(trash.sameVolume(entry))
+        for (bad in listOf(File(sd, "Note.txt").path, "${internal.path}/../sd/Note.txt", "${entry.trashDir}/files/Note.txt", "/etc/Note.txt")) {
+            val forged = entry.copy(originalPath = bad)
+            assertFalse(bad, trash.sameVolume(forged))
+            try {
+                trash.restore(forged)
+                org.junit.Assert.fail("restauré vers $bad")
+            } catch (e: FileOperationException) {
+                assertEquals(FileOperationException.Reason.DENIED, e.reason)
+            }
+        }
+        // L'élément est toujours dans la corbeille et se restaure normalement.
+        assertEquals(f.path, trash.restore(entry))
+    }
 }

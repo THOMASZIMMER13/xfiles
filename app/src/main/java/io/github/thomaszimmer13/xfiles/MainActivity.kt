@@ -50,9 +50,15 @@ class MainActivity : FragmentActivity() {
             }
         }
         val lock = (application as XFilesApplication).container.appLock
-        // Verrouillage actif : pas d'aperçu du contenu dans l'écran des applications récentes.
+        // Verrouillage actif ou coffre ouvert : pas d'aperçu du contenu dans l'écran des applications
+        // récentes (audit M-04).
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            lifecycleScope.launch { lock.enabled.collect { setRecentsScreenshotEnabled(!it) } }
+            val vaultKeys = (application as XFilesApplication).container.vaultKeys
+            lifecycleScope.launch {
+                combine(lock.enabled, vaultKeys.open) { locked, open -> locked || open.isNotEmpty() }
+                    .distinctUntilChanged()
+                    .collect { hide -> setRecentsScreenshotEnabled(!hide) }
+            }
         }
         setContent {
             XFilesTheme {

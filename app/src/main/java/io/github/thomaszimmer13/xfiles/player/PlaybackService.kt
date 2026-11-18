@@ -46,7 +46,10 @@ class PlaybackService : MediaSessionService() {
                 .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        session = MediaSession.Builder(this, player).setSessionActivity(openApp).build()
+        session = MediaSession.Builder(this, player)
+            .setSessionActivity(openApp)
+            .setCallback(TrustedControllers(packageName))
+            .build()
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
@@ -64,6 +67,19 @@ class PlaybackService : MediaSessionService() {
         }
         session = null
         super.onDestroy()
+    }
+
+    /**
+     * Seuls XFiles et les contrôleurs de confiance du système (notification, écran verrouillé,
+     * Bluetooth) se connectent (audit M-11) : une autre app ne lit pas le titre d'un média de coffre.
+     */
+    internal class TrustedControllers(private val ownPackage: String) : MediaSession.Callback {
+        @OptIn(UnstableApi::class)
+        override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult =
+            if (accepts(controller.isTrusted, controller.packageName)) super.onConnect(session, controller)
+            else MediaSession.ConnectionResult.reject()
+
+        fun accepts(trusted: Boolean, controllerPackage: String): Boolean = trusted || controllerPackage == ownPackage
     }
 
     companion object {

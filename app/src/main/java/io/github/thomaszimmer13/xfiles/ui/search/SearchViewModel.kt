@@ -92,8 +92,9 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         val starts = scope?.let { listOf(File(it)) } ?: roots.map { File(it.second) }
         val results = mutableListOf<SearchResult>()
         for (start in starts) {
+            // Audit F-05 : les liens symboliques ne sont jamais suivis (boucles sur le stockage externe).
             val walk = start.walkTopDown().onEnter { dir ->
-                dir == start || (dir.name != LocalTrash.DIR_NAME && !io.github.thomaszimmer13.xfiles.data.transfer.LocalTransfer.isReplaceTemp(dir.name) && (showHidden || !dir.name.startsWith(".")))
+                dir == start || (!java.nio.file.Files.isSymbolicLink(dir.toPath()) && dir.name != LocalTrash.DIR_NAME && !io.github.thomaszimmer13.xfiles.data.transfer.LocalTransfer.isReplaceTemp(dir.name) && (showHidden || !dir.name.startsWith(".")))
             }
             for (file in walk) {
                 coroutineContext.ensureActive()

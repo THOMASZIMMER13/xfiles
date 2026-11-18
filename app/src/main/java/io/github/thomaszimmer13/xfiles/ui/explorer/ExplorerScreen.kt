@@ -77,8 +77,12 @@ const val TRASH_ROUTE = Routes.TRASH
 /** Dossier affiché par l'autre panneau (null : il n'affiche pas un dossier du téléphone). */
 class OtherPane(val dir: String?, val name: String)
 
-/** Ce que les écrans d'un panneau peuvent faire en plus : nouvel onglet, envoi vers l'autre panneau. */
-class PaneActions(val openInNewTab: ((String) -> Unit)?, val otherPane: OtherPane?)
+/**
+ * Ce que les écrans d'un panneau peuvent faire en plus : nouvel onglet, envoi vers l'autre panneau.
+ * [isActive] : faux pour le panneau inactif du double panneau, qui ne prend alors jamais le focus
+ * initial (audit M-10, voir FocusOnceEffect).
+ */
+class PaneActions(val openInNewTab: ((String) -> Unit)?, val otherPane: OtherPane?, val isActive: Boolean = true)
 
 val LocalPaneActions = staticCompositionLocalOf { PaneActions(null, null) }
 
@@ -251,7 +255,7 @@ private fun ExplorerPane(
         announcer.announce(tabClosed.format(label(currentId)))
     }
 
-    val actions = PaneActions(openInNewTab = if (tabsOn) { route -> openTab(route) } else null, otherPane = otherPane)
+    val actions = PaneActions(openInNewTab = if (tabsOn) { route -> openTab(route) } else null, otherPane = otherPane, isActive = backEnabled)
     Column(Modifier.fillMaxSize()) {
         if (tabsOn) {
             TabStrip(

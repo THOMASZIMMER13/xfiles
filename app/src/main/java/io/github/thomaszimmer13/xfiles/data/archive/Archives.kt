@@ -1,10 +1,5 @@
 package io.github.thomaszimmer13.xfiles.data.archive
 
-import com.github.junrar.Archive
-import com.github.junrar.exception.RarException
-import com.github.junrar.exception.UnsupportedRarEncryptedException
-import com.github.junrar.exception.UnsupportedRarVersionException
-import com.github.junrar.exception.WrongPasswordException
 import io.github.thomaszimmer13.xfiles.data.source.FileOperationException
 import io.github.thomaszimmer13.xfiles.data.source.FileOperationException.Reason
 import io.github.thomaszimmer13.xfiles.data.transfer.TransferCancelledException
@@ -43,7 +38,11 @@ enum class ArchiveFormat(val extensions: List<String>) {
     GZ(listOf(".gz")),
     BZ2(listOf(".bz2")),
     XZ(listOf(".xz")),
+    /** RAR 4 et RAR 5, par libarchive (lecture seule, sans déchiffrement). */
     RAR(listOf(".rar")),
+
+    /** Image de disque ISO 9660 (Joliet, Rock Ridge), par libarchive. */
+    ISO(listOf(".iso")),
     ;
 
     /** Nom sans l'extension de l'archive (« Photos.tar.gz » → « Photos »). */
@@ -65,12 +64,20 @@ fun archiveFormatOf(name: String): ArchiveFormat? = ArchiveFormat.entries
 fun isArchive(name: String): Boolean = archiveFormatOf(name) != null
 
 /** Un élément lu dans une archive, avec son contenu (null pour un dossier). */
-private class StreamEntry(val name: String, val isDirectory: Boolean, val time: Long, val size: Long, val open: () -> InputStream?)
+private class StreamEntry(
+    val name: String,
+    val isDirectory: Boolean,
+    val time: Long,
+    val size: Long,
+    /** Lien physique : contenu identique à celui de cet élément (déjà extrait plus haut). */
+    val linkTo: String? = null,
+    val open: () -> InputStream?,
+)
 
 /**
  * Lecture, extraction et création de toutes les archives prises en charge :
  * zip (avec ou sans mot de passe), 7z (mot de passe en lecture), tar, tar.gz, tar.bz2, tar.xz, gz, bz2, xz,
- * RAR jusqu'à la version 4 (le format RAR5 n'est pas encore pris en charge).
+ * RAR 4 et RAR 5, images ISO (libarchive ; les RAR chiffrés ne sont pas pris en charge).
  * Opérations bloquantes : à appeler hors du fil principal.
  */
 object Archives {
@@ -119,7 +126,7 @@ object Archives {
         } catch (_: Exception) {
             false
         }
-        ArchiveFormat.RAR -> runCatching { Archive(File(path)).use { a -> a.isEncrypted || a.fileHeaders.any { it.isEncrypted } } }.getOrDefault(false)
+        // RAR chiffré : libarchive ne sait pas le déchiffrer, inutile de demander le mot de passe.
         else -> false
     }
 
@@ -142,6 +149,9 @@ object Archives {
      * @return chemin de ce qui a été créé au premier niveau.
      */
     fun extract(path: String, prefix: String?, targetDir: File, listener: TransferListener = TransferListener.NONE, password: String? = null): String {
+        // F-02 : espace libre surveillé pendant toute extraction (plafond éventuel posé par l'appelant).
+        @Suppress("NAME_SHADOWING")
+        val listener = listener as? ExtractGuard ?: ExtractGuard(targetDir, listener)
         val format = formatOf(path)
         if (format == ArchiveFormat.ZIP && password == null) return ZipArchive.extract(path, prefix, targetDir, listener)
         if (!targetDir.isDirectory || !targetDir.canWrite()) throw FileOperationException(Reason.DENIED, targetDir.path)
@@ -177,7 +187,20 @@ object Archives {
                     top.mkdirs()
                 }
                 made = true
-                if (!dest.canonicalPath.startsWith(top.canonicalPath)) return@read
+                // F-01 : la cible canonique doit être le dossier créé ou se trouver dessous (séparateur compris).
+                if (!isInside(top, dest)) return@read
+                val linked = e.linkTo
+                if (linked != null) {
+                    // Lien physique : copie de l'élément déjà extrait, s'il est bien dans ce même dossier.
+                    if (!isSafe(linked)) return@read
+                    val rel = linked.removePrefix(base)
+                    val source = if (prefix == null) File(top, rel) else File(top, rel.removePrefix("$topName/"))
+                    if (isInside(top, source) && source.isFile && source != dest) {
+                        dest.parentFile?.mkdirs()
+                        source.inputStream().use { input -> dest.outputStream().use { copyStream(input, it, listener) } }
+                    }
+                    return@read
+                }
                 if (e.isDirectory) {
                     dest.mkdirs()
                 } else {
@@ -324,22 +347,22 @@ object Archives {
                     val name = format.baseName(file.name)
                     onEntry(StreamEntry(name, false, file.lastModified(), -1) { singleStream(path, format) })
                 }
-                ArchiveFormat.RAR -> {
-                    val archive = if (password != null) Archive(file, password) else Archive(file)
-                    archive.use { a ->
-                        if (a.isEncrypted && password == null) throw FileOperationException(Reason.ENCRYPTED, path)
-                        for (h in a.fileHeaders) {
-                            val name = h.fileName.replace('\\', '/').trimEnd('/')
-                            if (name.isEmpty()) continue
-                            if (h.isEncrypted && password == null && withContent && !h.isDirectory) {
-                                throw FileOperationException(Reason.ENCRYPTED, path)
-                            }
-                            onEntry(
-                                StreamEntry(name, h.isDirectory, h.mTime?.time ?: 0L, h.fullUnpackSize) {
-                                    if (h.isDirectory) null else a.getInputStream(h)
-                                },
-                            )
+                ArchiveFormat.RAR, ArchiveFormat.ISO -> {
+                    val formats = if (format == ArchiveFormat.RAR) LibArchive.RAR else LibArchive.ISO
+                    val sizes = HashMap<String, Long>()
+                    LibArchive.read(path, password, formats) { e, input ->
+                        // Liens et fichiers spéciaux : jamais extraits (un lien pourrait mener hors du dossier).
+                        if (e.type == LibArchive.TYPE_OTHER) return@read
+                        val name = e.name.replace('\\', '/').trimEnd('/')
+                        if (name.isEmpty()) return@read
+                        if (withContent && e.encrypted && !e.isDirectory) throw FileOperationException(Reason.ENCRYPTED_UNSUPPORTED, path)
+                        if (e.type == LibArchive.TYPE_HARDLINK) {
+                            val target = e.link?.replace('\\', '/')?.trimEnd('/') ?: return@read
+                            onEntry(StreamEntry(name, false, e.time, sizes[target] ?: 0, linkTo = target) { null })
+                            return@read
                         }
+                        if (!e.isDirectory) sizes[name] = e.size
+                        onEntry(StreamEntry(name, e.isDirectory, e.time, if (e.isDirectory) 0 else e.size) { if (e.isDirectory) null else input })
                     }
                 }
             }
@@ -383,12 +406,13 @@ object Archives {
     private fun translate(e: Exception, password: String?): Exception = when {
         e is TransferCancelledException || e is FileOperationException -> e
         e is PasswordRequiredException -> FileOperationException(Reason.ENCRYPTED, e.message.orEmpty())
-        e is UnsupportedRarVersionException -> FileOperationException(Reason.UNSUPPORTED, "RAR5")
-        e is UnsupportedRarEncryptedException -> FileOperationException(Reason.UNSUPPORTED, e.message.orEmpty())
-        e is WrongPasswordException -> FileOperationException(Reason.WRONG_PASSWORD, e.message.orEmpty())
+        // Messages de libarchive pour un RAR chiffré (contenu ou en-têtes).
+        e.message?.contains("ncrypt", ignoreCase = false) == true && e.message?.contains("unsupported", ignoreCase = true) == true ->
+            FileOperationException(Reason.ENCRYPTED_UNSUPPORTED, e.message.orEmpty())
+        e.message?.contains("passphrase", ignoreCase = true) == true -> FileOperationException(Reason.ENCRYPTED_UNSUPPORTED, e.message.orEmpty())
         e is net.lingala.zip4j.exception.ZipException && e.type == net.lingala.zip4j.exception.ZipException.Type.WRONG_PASSWORD ->
             FileOperationException(Reason.WRONG_PASSWORD, e.message.orEmpty())
-        password != null && (e is RarException || e.message?.contains("password", ignoreCase = true) == true ||
+        password != null && (e.message?.contains("password", ignoreCase = true) == true ||
             e.message?.contains("checksum", ignoreCase = true) == true || e is org.tukaani.xz.CorruptedInputException) ->
             FileOperationException(Reason.WRONG_PASSWORD, e.message.orEmpty())
         e is IOException && e.message?.contains("encrypted", ignoreCase = true) == true -> FileOperationException(Reason.ENCRYPTED, e.message.orEmpty())
@@ -420,6 +444,13 @@ object Archives {
         prefix == null || path == prefix || path.startsWith("$prefix/")
 
     private fun isSafe(path: String): Boolean = !path.startsWith("/") && path.split('/').none { it == ".." }
+
+    /** [file] est [root] ou se trouve dessous, chemins canoniques (liens résolus) et séparateur compris. */
+    internal fun isInside(root: File, file: File): Boolean {
+        val r = root.canonicalPath
+        val p = file.canonicalPath
+        return p == r || p.startsWith(r + File.separator)
+    }
 
     /** Flux d'un élément à l'intérieur d'une archive lue en continu : le fermer ne ferme pas l'archive. */
     private class NonClosing(private val inner: InputStream) : InputStream() {

@@ -48,6 +48,9 @@ data class TransferProgress(
 data class TransferOutcome(val message: String, val targetDir: String, val focusPath: String?, val failed: Boolean = false)
 
 /** Question posée quand un nom existe déjà : [othersRemaining] conflits suivent celui-ci. */
+/** Archive qui se décompresse en une taille démesurée : confirmation demandée (bombe possible). */
+data class LargePrompt(val name: String, val declaredBytes: Long, val archiveBytes: Long)
+
 data class ConflictPrompt(val name: String, val isDirectory: Boolean, val folder: String, val othersRemaining: Int)
 
 data class ConflictAnswer(val choice: ConflictChoice?, val applyToAll: Boolean) {
@@ -95,6 +98,7 @@ class TransferManager(
     fun cancel() {
         cancelRequested = true
         pendingConflict?.complete(ConflictAnswer(null, false))
+        pendingLarge?.complete(false)
     }
 
     fun answerConflict(answer: ConflictAnswer) {
@@ -129,7 +133,16 @@ class TransferManager(
         return launchJob(TransferKind.EXTRACT, subject, folder, total = {
             Archives.uncompressedSize(Archives.list(archivePath, password), prefix)
         }) { tracker ->
-            val created = Archives.extract(archivePath, prefix, File(targetDir), tracker, password)
+            // F-02 : espace libre vérifié avant de commencer ; taille démesurée confirmée par l'utilisateur.
+            val declared = runCatching { Archives.uncompressedSize(Archives.list(archivePath, password), prefix) }.getOrDefault(0L)
+            val archiveSize = File(archivePath).length()
+            val plan = io.github.thomaszimmer13.xfiles.data.archive.ExtractGuard.plan(declared, archiveSize, File(targetDir).usableSpace)
+            if (plan.noSpace) throw FileOperationException(FileOperationException.Reason.NO_SPACE, targetDir)
+            if (plan.suspicious && !askLarge(LargePrompt(subject, declared, archiveSize))) {
+                return@launchJob TransferOutcome(app.getString(R.string.operation_cancelled), "", null)
+            }
+            val guard = io.github.thomaszimmer13.xfiles.data.archive.ExtractGuard(File(targetDir), tracker, plan.maxBytes)
+            val created = Archives.extract(archivePath, prefix, File(targetDir), guard, password)
             TransferOutcome(app.getString(R.string.extracted, subject, File(created).name, folder), targetDir, created)
         }
     }
@@ -295,6 +308,26 @@ class TransferManager(
         TransferKind.EXTRACT -> R.string.started_extract
         TransferKind.COMPRESS -> R.string.started_compress
         TransferKind.IMPORT -> R.string.started_import
+    }
+
+    private val _large = MutableStateFlow<LargePrompt?>(null)
+    val large: StateFlow<LargePrompt?> = _large.asStateFlow()
+    private var pendingLarge: CompletableDeferred<Boolean>? = null
+
+    private suspend fun askLarge(prompt: LargePrompt): Boolean {
+        val deferred = CompletableDeferred<Boolean>()
+        pendingLarge = deferred
+        _large.value = prompt
+        return try {
+            deferred.await()
+        } finally {
+            _large.value = null
+            pendingLarge = null
+        }
+    }
+
+    fun answerLarge(extract: Boolean) {
+        pendingLarge?.complete(extract)
     }
 
     private suspend fun askConflict(prompt: ConflictPrompt): ConflictAnswer {

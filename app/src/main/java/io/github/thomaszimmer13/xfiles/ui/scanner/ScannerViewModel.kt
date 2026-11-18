@@ -81,6 +81,8 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                 val boxes = ocr.detect(bitmap, 640)
                 val guidance = ScanGuide.evaluate(boxes, bitmap.width, bitmap.height)
                 update(guidance)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (_: Exception) {
                 // Image illisible : on attend la suivante.
             } finally {
@@ -141,6 +143,8 @@ class ScannerViewModel(application: Application) : AndroidViewModel(application)
                     if (page.paragraphs.isEmpty()) app.getString(R.string.scan_page_added_empty, number)
                     else app.getString(R.string.scan_page_added, number, start),
                 )
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (_: Exception) {
                 _state.update { it.copy(processing = false) }
                 announcer.announce(app.getString(R.string.ocr_failed))

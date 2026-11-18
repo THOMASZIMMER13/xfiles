@@ -4,7 +4,9 @@ go 1.26.0
 
 require (
 	github.com/rclone/rclone v1.76.0
+	golang.org/x/crypto v0.59.0
 	golang.org/x/mobile v0.0.0-20261117202452-47699113848a
+	golang.org/x/text v0.44.0
 )
 
 require (
@@ -68,14 +70,12 @@ require (
 	go.opentelemetry.io/otel v1.45.0 // indirect
 	go.opentelemetry.io/otel/metric v1.45.0 // indirect
 	go.opentelemetry.io/otel/trace v1.45.0 // indirect
-	golang.org/x/crypto v0.59.0 // indirect
 	golang.org/x/mod v0.43.0 // indirect
 	golang.org/x/net v0.63.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
 	golang.org/x/sync v0.25.0 // indirect
 	golang.org/x/sys v0.50.0 // indirect
 	golang.org/x/term v0.48.0 // indirect
-	golang.org/x/text v0.44.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
 	golang.org/x/tools v0.53.0 // indirect
 	google.golang.org/api v0.304.0 // indirect
@@ -86,3 +86,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	moul.io/http2curl/v2 v2.3.0 // indirect
 )
+
+// rclone officiel + correctifs XFiles (patches/), préparé par patch.sh.
+replace github.com/rclone/rclone => ./third_party/rclone

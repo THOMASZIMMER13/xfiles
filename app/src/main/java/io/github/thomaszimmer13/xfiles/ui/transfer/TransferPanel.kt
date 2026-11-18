@@ -16,8 +16,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.AndroidViewModel
@@ -38,6 +42,7 @@ class TransferViewModel(application: Application) : AndroidViewModel(application
     private val manager = (application as XFilesApplication).container.transfers
     val progress = manager.progress
     val conflict = manager.conflict
+    val large = manager.large
     val announcer = Announcer(viewModelScope)
 
     init {
@@ -46,6 +51,7 @@ class TransferViewModel(application: Application) : AndroidViewModel(application
 
     fun cancel() = manager.cancel()
     fun answerConflict(answer: ConflictAnswer) = manager.answerConflict(answer)
+    fun answerLarge(extract: Boolean) = manager.answerLarge(extract)
 }
 
 /**
@@ -64,14 +70,45 @@ fun TransferPanel(viewModel: TransferViewModel = viewModel()) {
     progress?.let { ProgressBanner(it, onCancel = viewModel::cancel) }
     StatusMessage(announcement)
     conflict?.let { ConflictDialog(it, onAnswer = viewModel::answerConflict) }
+    val large by viewModel.large.collectAsStateWithLifecycle()
+    large?.let { LargeExtractDialog(it, onAnswer = viewModel::answerLarge) }
+}
+
+/** Archive qui se décompresse en une taille démesurée (F-02) : « Extraire quand même » ou « Annuler ». */
+@Composable
+private fun LargeExtractDialog(prompt: io.github.thomaszimmer13.xfiles.data.transfer.LargePrompt, onAnswer: (Boolean) -> Unit) {
+    val declared = io.github.thomaszimmer13.xfiles.a11y.SizeFormatter.spoken(prompt.declaredBytes)
+    val archive = io.github.thomaszimmer13.xfiles.a11y.SizeFormatter.spoken(prompt.archiveBytes)
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = { onAnswer(false) },
+        title = {
+            androidx.compose.material3.Text(
+                androidx.compose.ui.res.stringResource(R.string.extract_large_title),
+                modifier = Modifier.semantics { heading() },
+            )
+        },
+        text = { androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.extract_large_message, prompt.name, declared, archive)) },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = { onAnswer(true) }) {
+                androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.extract_large_confirm))
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = { onAnswer(false) }) {
+                androidx.compose.material3.Text(androidx.compose.ui.res.stringResource(R.string.action_cancel))
+            }
+        },
+    )
 }
 
 @Composable
 private fun ProgressBanner(progress: TransferProgress, onCancel: () -> Unit) {
     val title = stringResource(TransferService.titleFor(progress.kind), progress.subject, progress.folder)
     val percent = stringResource(R.string.progress_percent, progress.percent)
+    // Audit M-07 : TalkBack lit l'avancement par paliers de 10 % ; la barre garde la valeur exacte.
+    val spokenPercent = stringResource(R.string.progress_percent, io.github.thomaszimmer13.xfiles.a11y.ProgressSpeech.tenths(progress.percent))
     val known = progress.totalBytes > 0
-    val spoken = listOfNotNull(title, if (known) percent else null, progress.currentName.ifEmpty { null }).joinToString(", ")
+    val spoken = listOfNotNull(title, if (known) spokenPercent else null, progress.currentName.ifEmpty { null }).joinToString(", ")
     Column(Modifier.background(MaterialTheme.colorScheme.secondaryContainer)) {
         HorizontalDivider()
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp)) {
@@ -79,7 +116,10 @@ private fun ProgressBanner(progress: TransferProgress, onCancel: () -> Unit) {
                 Modifier
                     .weight(1f)
                     .padding(vertical = 8.dp)
-                    .clearAndSetSemantics { contentDescription = spoken },
+                    .clearAndSetSemantics {
+                        contentDescription = spoken
+                        if (known) progressBarRangeInfo = ProgressBarRangeInfo(progress.percent / 100f, 0f..1f)
+                    },
             ) {
                 Text(title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 if (known) {

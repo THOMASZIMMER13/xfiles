@@ -102,7 +102,7 @@ fun DetailsDialog(
                     ),
                 )
             }
-        } else {
+        } else if (item.sizeBytes >= 0) {
             val grouped = NumberFormat.getIntegerInstance(Locale.FRANCE).format(item.sizeBytes)
             add(
                 DetailRow(
@@ -112,9 +112,9 @@ fun DetailsDialog(
                     spokenValue = "${SizeFormatter.spoken(item.sizeBytes)}, ${item.sizeBytes} octets",
                 ),
             )
-            add(DetailRow(stringResource(R.string.details_mime), FileOpener.mimeType(item.name)))
         }
-        add(DetailRow(stringResource(R.string.details_modified), DateFormatter.full(item.lastModified)))
+        if (!item.isDirectory) add(DetailRow(stringResource(R.string.details_mime), FileOpener.mimeType(item.name)))
+        if (item.lastModified > 0) add(DetailRow(stringResource(R.string.details_modified), DateFormatter.full(item.lastModified)))
         add(
             DetailRow(
                 label = stringResource(R.string.details_location),
@@ -182,10 +182,10 @@ fun DetailsDialog(
     )
 }
 
-private data class DetailRow(val label: String, val value: String, val spokenValue: String = value)
+internal data class DetailRow(val label: String, val value: String, val spokenValue: String = value)
 
 @Composable
-private fun DetailLine(row: DetailRow, clickLabel: String? = null, onClick: (() -> Unit)? = null) {
+internal fun DetailLine(row: DetailRow, clickLabel: String? = null, onClick: (() -> Unit)? = null) {
     val spoken = stringResource(R.string.details_row_spoken, row.label, row.spokenValue)
     Column(
         Modifier

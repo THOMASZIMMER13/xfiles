@@ -27,7 +27,7 @@ Première version publique : un gestionnaire de fichiers pensé d'abord pour Tal
 - Favoris : dossiers et fichiers.
 
 ### Archives
-- Parcourir une archive comme un dossier, ouvrir un fichier qu'elle contient : zip, 7z, tar, tar.gz, tar.bz2, tar.xz, gz, bz2, xz, RAR (jusqu'à la version 4).
+- Parcourir une archive comme un dossier, ouvrir un fichier qu'elle contient : zip, 7z, tar, tar.gz, tar.bz2, tar.xz, gz, bz2, xz, RAR 4 et RAR 5, images disque ISO (lus par libarchive, licence BSD). Les RAR chiffrés sont reconnus mais ne peuvent pas être extraits.
 - Archives protégées : le mot de passe est demandé, avec une case « Afficher le mot de passe » ; un mot de passe faux est annoncé.
 - Extraire tout ou partie, compresser un élément ou une sélection en zip (mot de passe AES-256 facultatif), 7z ou tar.gz, avec le nom de son choix.
 
@@ -65,7 +65,9 @@ Première version publique : un gestionnaire de fichiers pensé d'abord pour Tal
 - « Tester la connexion » annonce le résultat ; mots de passe chiffrés par le Keystore d'Android, jamais sauvegardés.
 - SFTP : empreinte de la clé du serveur à accepter la première fois, puis vérifiée ; alerte si elle change.
 - Navigation dans les dossiers du serveur ; ouvrir un fichier le copie dans le téléphone (lecteur de documents, lecteur audio et vidéo…).
-- Actions : Télécharger dans Téléchargements (dossiers compris), Renommer, Supprimer du serveur, Nouveau dossier ; « Envoyer ici » envoie le presse-papiers d'XFiles.
+- Actions : Télécharger dans Téléchargements (dossiers compris), Partager, Renommer, Détails, Copier le chemin, Supprimer du serveur, Nouveau dossier ; « Envoyer ici » envoie le presse-papiers d'XFiles.
+- Taille ou date inconnues du serveur : simplement pas lues (jamais « 0 octet » ni « 1970 »). Après une suppression, le focus va à l'élément voisin ; au retour d'un sous-dossier, sur ce sous-dossier.
+- Avancement des transferts lu par paliers de 10 %, la barre gardant la valeur exacte.
 - Transferts avec avancement et Annuler ; connexion rouverte toute seule après une coupure.
 
 ### Comptes en ligne
@@ -87,7 +89,7 @@ Première version publique : un gestionnaire de fichiers pensé d'abord pour Tal
 - « Afficher dans l'Explorer » ajoute l'entrée sous « Sur l'appareil ». Mêmes actions qu'un serveur : ouvrir, télécharger, envoyer ici, renommer, supprimer, nouveau dossier.
 
 ### Sécurité
-- « Verrouiller XFiles » : empreinte, visage ou code du téléphone à l'ouverture, délai au choix (dès la sortie, 1, 5 ou 15 minutes) ; contenu masqué dans les applications récentes (Android 13 et plus).
+- « Verrouiller XFiles » : empreinte, visage ou code du téléphone à l'ouverture, délai au choix (dès la sortie, 1, 5 ou 15 minutes) ; contenu masqué dans les applications récentes (Android 13 et plus), y compris tant qu'un coffre est ouvert.
 - « Confirmer mon identité avant les serveurs » : une fois par utilisation, avant un serveur, un compte ou un coffre.
 - Activer ou désactiver ces réglages demande l'identité.
 

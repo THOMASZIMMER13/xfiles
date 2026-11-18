@@ -45,7 +45,7 @@ class RcloneRemoteTest {
         assertEquals(listOf("Vacances", "Budget.xlsx", "a.jpg"), list.map { it.name })
         assertEquals("/Photos/été/a.jpg", list[2].path)
         assertTrue(list[0].isDirectory)
-        assertEquals(0L, list[1].size) // taille inconnue (document Google)
+        assertEquals(-1L, list[1].size) // taille inconnue (document Google) : jamais lue « 0 octet »
         assertEquals(1234L, list[2].size)
         assertEquals(java.time.Instant.parse("2026-01-02T03:04:05.123Z").toEpochMilli(), list[0].lastModified)
     }

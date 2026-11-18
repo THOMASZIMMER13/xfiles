@@ -20,6 +20,8 @@ fi
 export ANDROID_HOME="$sdk" ANDROID_NDK_HOME
 
 cd "$here"
+# rclone officiel + correctifs XFiles (PKCE…), voir patch.sh.
+./patch.sh
 # gomobile et gobind à la version de golang.org/x/mobile fixée dans go.mod.
 version="$(go list -m -f '{{.Version}}' golang.org/x/mobile)"
 if [ ! -x "$bin/gomobile" ] || [ "$(cat "$bin/version" 2>/dev/null)" != "$version" ]; then
@@ -27,7 +29,7 @@ if [ ! -x "$bin/gomobile" ] || [ "$(cat "$bin/version" 2>/dev/null)" != "$versio
   echo "$version" > "$bin/version"
 fi
 export PATH="$bin:$PATH"
-gomobile bind -target=android/arm64,android/arm -androidapi 30 \
+gomobile bind -target=android/arm64,android/arm,android/amd64 -androidapi 30 \
   -javapkg io.github.thomaszimmer13.xfiles.rclone -trimpath -ldflags="-s -w" \
   -o "$out" ./bridge
 rm -f "${out%.aar}-sources.jar"

@@ -6,9 +6,6 @@
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
 
-# junrar journalise via slf4j sans fournir d'implémentation : rien à journaliser dans l'app.
--dontwarn org.slf4j.impl.StaticLoggerBinder
-
 # pdfbox-android : décodeur JPEG 2000 optionnel, absent (les images ne servent pas à la lecture du texte).
 -dontwarn com.gemalto.jp2.**
 # pdfbox charge polices et tables par réflexion et par ressources : on le garde tel quel.

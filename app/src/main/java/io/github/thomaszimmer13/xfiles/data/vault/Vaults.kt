@@ -103,8 +103,11 @@ class Vaults(
             sessions.use(server) { it.download("/$WITNESS_NAME", out) }
             out.toByteArray().contentEquals(WITNESS)
         } catch (e: RemoteException) {
-            if (e.reason != RemoteException.Reason.NOT_FOUND && e.reason != RemoteException.Reason.PROTOCOL) {
+            // Audit F-07 : seul un témoin introuvable ou indéchiffrable signale un mauvais mot de passe ;
+            // une panne réseau ou de protocole est remontée telle quelle (et non lue « mot de passe incorrect »).
+            if (!wrongPassword(e)) {
                 keys.remove(server.id)
+                sessions.forget(server.id)
                 throw e
             }
             false
@@ -205,6 +208,14 @@ class Vaults(
         const val ID_PREFIX = "vault-"
         const val FOLDER = "Coffres XFiles"
         private const val WITNESS_NAME = ".xfiles-coffre"
+
+        /** Erreur de lecture du témoin due à la clé : nom chiffré introuvable, ou bloc indéchiffrable. */
+        internal fun wrongPassword(e: RemoteException): Boolean {
+            if (e.reason == RemoteException.Reason.NOT_FOUND) return true
+            if (e.reason != RemoteException.Reason.PROTOCOL) return false
+            val m = e.message.orEmpty().lowercase()
+            return "bad password" in m || "authenticate decrypted" in m || "decrypt" in m
+        }
         private val WITNESS = "xfiles-vault-1".toByteArray()
 
         /** Valeur rclone entre apostrophes (doublées à l'intérieur). */

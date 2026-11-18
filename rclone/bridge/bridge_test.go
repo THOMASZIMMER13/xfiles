@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -8,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/rclone/rclone/fs/config"
 )
 
 func call(t *testing.T, method string, in map[string]any) map[string]any {
@@ -126,7 +129,9 @@ func TestOperationsLikeXFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	loc := resp.Header.Get("Location")
-	if !strings.HasPrefix(loc, "https://accounts.google.com/") || !strings.Contains(loc, "client_id=123-test.apps.googleusercontent.com") || !strings.Contains(loc, "access_type=offline") {
+	if !strings.HasPrefix(loc, "https://accounts.google.com/") || !strings.Contains(loc, "client_id=123-test.apps.googleusercontent.com") || !strings.Contains(loc, "access_type=offline") ||
+		// PKCE (patches/0001-pkce.patch) : défi S256 envoyé, le code seul ne suffit plus.
+		!strings.Contains(loc, "code_challenge=") || !strings.Contains(loc, "code_challenge_method=S256") {
 		t.Fatalf("redirection : %d %q", resp.StatusCode, loc)
 	}
 	call(t, "config/oauthstop", map[string]any{})
@@ -174,5 +179,44 @@ func TestVaultLikeXFiles(t *testing.T) {
 	_ = json.Unmarshal([]byte(r.Output), &st)
 	if r.Status == 200 && st["item"] != nil {
 		t.Fatalf("mauvais mot de passe accepté : %s", r.Output)
+	}
+}
+
+// Configuration illisible (abîmée ou mot de passe perdu) : détectée sans passer par rclone, qui
+// demanderait un mot de passe ou quitterait le processus (audit M-08).
+func TestConfigReadable(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rclone.conf")
+	if !configReadable(path, "secret") {
+		t.Fatal("absente : doit être acceptée")
+	}
+	os.WriteFile(path, []byte("[xf]\ntype = alias\n"), 0o600)
+	if !configReadable(path, "secret") {
+		t.Fatal("en clair : doit être acceptée")
+	}
+	// Vraie configuration chiffrée par rclone avec « secret » (produite par TestOperationsLikeXFiles).
+	enc := filepath.Join(dir, "enc.conf")
+	var buf bytes.Buffer
+	if err := config.SetConfigPassword("secret"); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.Encrypt(strings.NewReader("[xf]\ntype = alias\n"), &buf); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(enc, buf.Bytes(), 0o600)
+	if !configReadable(enc, "secret") {
+		t.Fatal("bon mot de passe refusé")
+	}
+	if configReadable(enc, "autre") {
+		t.Fatal("mauvais mot de passe accepté")
+	}
+	truncated := filepath.Join(dir, "abime.conf")
+	os.WriteFile(truncated, buf.Bytes()[:buf.Len()-12], 0o600) // données chiffrées coupées
+	if configReadable(truncated, "secret") {
+		t.Fatal("fichier tronqué accepté")
+	}
+	os.WriteFile(truncated, []byte("RCLONE_ENCRYPT_V1:\nxxx"), 0o600)
+	if configReadable(truncated, "secret") {
+		t.Fatal("format inconnu accepté")
 	}
 }

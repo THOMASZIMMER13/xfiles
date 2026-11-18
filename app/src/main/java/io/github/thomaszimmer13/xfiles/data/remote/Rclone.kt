@@ -26,6 +26,13 @@ class Rclone(context: Context) : RcloneRpc {
 
     @Volatile private var ready = false
 
+    /**
+     * Vrai si la configuration des comptes était illisible au démarrage (fichier abîmé) : rclone l'a
+     * mise de côté (« rclone.conf.illisible ») au lieu d'arrêter l'application ; comptes à reconnecter.
+     */
+    @Volatile var configWasReset = false
+        private set
+
     @Synchronized
     private fun init() {
         if (ready) return
@@ -38,7 +45,7 @@ class Rclone(context: Context) : RcloneRpc {
             configFile.delete()
             CloudProvider.randomPassword().also { passwordFile.writeText(SecretBox.encrypt(it)) }
         }
-        Bridge.init(configFile.absolutePath, cache.absolutePath, usable)
+        configWasReset = Bridge.init(configFile.absolutePath, cache.absolutePath, usable) == Bridge.ConfigUnreadable
         ready = true
     }
 

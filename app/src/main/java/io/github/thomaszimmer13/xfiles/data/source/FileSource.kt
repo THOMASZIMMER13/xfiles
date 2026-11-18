@@ -56,5 +56,14 @@ class FileOperationException(val reason: Reason, message: String) : IOException(
 
         /** Archive illisible ou abîmée. */
         BAD_ARCHIVE,
+
+        /** Archive chiffrée qu'XFiles ne sait pas ouvrir (RAR chiffré : libarchive ne le déchiffre pas). */
+        ENCRYPTED_UNSUPPORTED,
+
+        /** Pas assez d'espace libre sur le volume de destination. */
+        NO_SPACE,
+
+        /** L'archive se décompresse en bien plus que ce qu'elle annonçait (bombe de décompression). */
+        TOO_BIG,
     }
 }

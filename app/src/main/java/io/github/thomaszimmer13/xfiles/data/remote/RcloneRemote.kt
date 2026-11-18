@@ -36,7 +36,7 @@ class RcloneRemote(
             val o = list.getJSONObject(i)
             val name = RemoteClient.safeName(o.getString("Name")) ?: return@mapNotNull null
             val isDir = o.optBoolean("IsDir")
-            RemoteEntry(name, RemoteClient.child(path, name), isDir, if (isDir) 0 else o.optLong("Size").coerceAtLeast(0), parseTime(o.optString("ModTime")))
+            RemoteEntry(name, RemoteClient.child(path, name), isDir, if (isDir) 0 else o.optLong("Size", -1).takeIf { it >= 0 } ?: -1L, parseTime(o.optString("ModTime")))
         }
     }
 

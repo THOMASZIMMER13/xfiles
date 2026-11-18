@@ -71,7 +71,7 @@ class FtpRemote(server: RemoteServer) : RemoteClient {
         }.ifEmpty { if (FTPReply.isPositiveCompletion(ftp.replyCode)) emptyArray() else ftp.listFiles(real(path)) }
         check(path)
         files.filter { RemoteClient.safeName(it.name.orEmpty()) != null }.map {
-            RemoteEntry(it.name, RemoteClient.child(path, it.name), it.isDirectory, it.size.coerceAtLeast(0), it.timestamp?.timeInMillis ?: 0L)
+            RemoteEntry(it.name, RemoteClient.child(path, it.name), it.isDirectory, if (it.isDirectory) 0 else it.size.takeIf { s -> s >= 0 } ?: -1L, it.timestamp?.timeInMillis ?: 0L)
         }
     }
 

@@ -77,15 +77,25 @@ fun XFilesTopBar(
  * Exécute [action] une seule fois, dès que [ready] devient vrai, après l'affichage de l'image suivante
  * (pour que l'élément à focaliser existe bien à l'écran).
  * Sert à replacer le focus TalkBack au retour arrière ou à l'ouverture d'un dossier.
+ * Dans le panneau inactif du double panneau, rien n'est fait : le focus initial reste dans le panneau
+ * actif (audit M-10).
  */
 @Composable
 fun FocusOnceEffect(ready: Boolean, action: suspend () -> Unit) {
     var done by remember { mutableStateOf(false) }
+    val active = io.github.thomaszimmer13.xfiles.ui.explorer.LocalPaneActions.current.isActive
     LaunchedEffect(ready) {
         if (ready && !done) {
             done = true
+            if (!active) return@LaunchedEffect
             withFrameNanos { }
-            runCatching { action() }
+            try {
+                action()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Élément disparu entre-temps : le focus reste où il est.
+            }
         }
     }
 }

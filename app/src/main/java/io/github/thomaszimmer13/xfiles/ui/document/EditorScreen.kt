@@ -83,6 +83,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 return@launch _state.update { it.copy(loading = false, problem = EditorProblem.TOO_BIG) }
             } catch (_: java.io.FileNotFoundException) {
                 return@launch _state.update { it.copy(loading = false, problem = EditorProblem.NOT_FOUND) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (_: Exception) {
                 return@launch _state.update { it.copy(loading = false, problem = EditorProblem.UNREADABLE) }
             }
@@ -113,6 +115,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 container.feedback.success()
                 announcer.announce(app.getString(if (changedEncoding) R.string.editor_saved_utf8 else R.string.editor_saved))
                 then()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (_: Exception) {
                 _state.update { it.copy(saving = false) }
                 container.feedback.failure()

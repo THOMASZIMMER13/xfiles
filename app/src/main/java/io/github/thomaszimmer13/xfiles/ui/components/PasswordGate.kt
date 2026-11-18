@@ -68,6 +68,12 @@ class PasswordGate(private val scope: CoroutineScope) {
     /** Mot de passe déjà validé pour [path], ou null. */
     fun knownPassword(path: String): String? = known[path]
 
+    /** Oublie les mots de passe retenus (audit F-04) : archive refermée, écran quitté. */
+    fun clear() {
+        known.clear()
+        dismiss()
+    }
+
     /**
      * Lance [action] avec le mot de passe de l'archive (null si elle n'en a pas).
      * [force] : demander même si l'archive ne semble pas chiffrée (noms chiffrés d'un 7z ou d'un RAR).

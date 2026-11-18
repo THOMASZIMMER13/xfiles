@@ -18,6 +18,7 @@ import io.github.thomaszimmer13.xfiles.data.document.PdfText
 import io.github.thomaszimmer13.xfiles.data.document.Linkifier
 import io.github.thomaszimmer13.xfiles.data.ocr.OcrModelState
 import io.github.thomaszimmer13.xfiles.data.ocr.OcrService
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import io.github.thomaszimmer13.xfiles.ui.components.Announcer
 import io.github.thomaszimmer13.xfiles.ui.search.SearchViewModel
@@ -129,6 +130,8 @@ class DocumentViewModel(application: Application) : AndroidViewModel(application
                 _state.update { it.copy(loading = false, problem = if (e.message == "pdf-image") DocProblem.PDF_IMAGES else DocProblem.UNREADABLE) }
             } catch (_: java.io.FileNotFoundException) {
                 _state.update { it.copy(loading = false, problem = DocProblem.NOT_FOUND) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (_: Exception) {
                 _state.update { it.copy(loading = false, problem = DocProblem.UNREADABLE) }
             } catch (_: OutOfMemoryError) {
@@ -176,6 +179,8 @@ class DocumentViewModel(application: Application) : AndroidViewModel(application
             val isImage = OcrService.isImage(file.name)
             val total = try {
                 if (isImage) 1 else withContext(Dispatchers.IO) { ocrService.pdfPageCount(file) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (_: Exception) {
                 _state.update { it.copy(loading = false, problem = DocProblem.UNREADABLE) }
                 return@launch
@@ -296,6 +301,7 @@ class DocumentViewModel(application: Application) : AndroidViewModel(application
             val updated = doc.blocks.toMutableList()
             var changed = false
             for ((i, block) in doc.blocks.withIndex().take(3_000)) {
+                ensureActive()
                 val text = block.text
                 if (text.length < 10 || text.length > classifier.maxGenerateLinksTextLength) continue
                 if (block !is DocBlock.Paragraph && block !is DocBlock.ListItem) continue

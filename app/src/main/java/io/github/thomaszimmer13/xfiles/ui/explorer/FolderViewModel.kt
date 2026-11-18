@@ -293,6 +293,8 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
         val dir = _state.value.path ?: return
         val folder = folderName()
         passwordGate.run(item.path, item.name) { password ->
+            // Le mot de passe sert à cette extraction seulement (audit F-04).
+            passwordGate.clear()
             startOrBusy { transfers.extract(item.path, null, dir, folder, password) }
         }
     }
@@ -541,6 +543,9 @@ internal fun FileOperationException.Reason.message(): Int = when (this) {
     FileOperationException.Reason.BAD_ARCHIVE -> R.string.op_bad_archive
     FileOperationException.Reason.WRONG_PASSWORD -> R.string.op_wrong_password
     FileOperationException.Reason.UNSUPPORTED -> R.string.op_unsupported
+    FileOperationException.Reason.ENCRYPTED_UNSUPPORTED -> R.string.op_encrypted_unsupported
+    FileOperationException.Reason.NO_SPACE -> R.string.op_no_space
+    FileOperationException.Reason.TOO_BIG -> R.string.op_too_big
 }
 
 /** Libellé d'un critère de tri. */

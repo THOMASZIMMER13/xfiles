@@ -1105,4 +1105,12 @@
 
     <!-- Lot 1 sécurité -->
     <string name="cloud_port_busy">Connexion impossible : une autre application occupe le port de connexion de XFiles. Fermez les applications récemment installées ou redémarrez le téléphone, puis réessayez.</string>
+    <!-- Lot 2 -->
+    <string name="cloud_config_reset">La configuration des comptes en ligne était abîmée et a été mise de côté. Reconnectez ce compte depuis « Modifier ».</string>
+    <string name="op_encrypted_unsupported">%1$s est une archive RAR chiffrée : XFiles ne sait pas encore l\'ouvrir.</string>
+    <string name="op_no_space">Pas assez d\'espace libre pour %1$s.</string>
+    <string name="op_too_big">Extraction de %1$s arrêtée : l\'archive se décompresse en bien plus que ce qu\'elle annonçait.</string>
+    <string name="extract_large_title">Archive très volumineuse</string>
+    <string name="extract_large_message">%1$s se décompresse en %2$s à partir de %3$s seulement. Cela peut remplir le téléphone. Extraire quand même ?</string>
+    <string name="extract_large_confirm">Extraire quand même</string>
 </resources>

@@ -96,6 +96,8 @@ class BatchRenameViewModel(application: Application) : AndroidViewModel(applicat
                 container.feedback.success()
                 _state.update { it.copy(working = false, done = done) }
                 announcer.announce(app.resources.getQuantityString(R.plurals.rename_done, done.size, done.size))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 container.feedback.failure()
                 _state.update { it.copy(working = false) }
@@ -114,6 +116,8 @@ class BatchRenameViewModel(application: Application) : AndroidViewModel(applicat
                 done.forEach { d -> if (File(d.oldPath).isDirectory) container.preferences.onPathRenamed(d.newPath, d.oldPath) }
                 _state.update { it.copy(working = false, done = null) }
                 announcer.announce(app.getString(R.string.rename_undone))
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _state.update { it.copy(working = false) }
                 announcer.announce(app.getString(R.string.rename_failed, e.message.orEmpty()))

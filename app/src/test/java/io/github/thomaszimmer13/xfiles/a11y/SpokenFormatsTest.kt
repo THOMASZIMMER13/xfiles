@@ -61,4 +61,35 @@ class SpokenFormatsTest {
         val file = FileItem("/s/Facture.pdf", "Facture.pdf", false, 245_000, at(2024, 3, 3), null)
         assertEquals("Facture.pdf, document PDF, 245 kilooctets, modifié le 3 mars 2024", FileDescriptions.spoken(file, now))
     }
+
+    /** Audit M-05 : entrées distantes sans taille ni date connues. */
+    @Test fun unknownSizeAndDateAreOmitted() {
+        val remote = FileItem("/Docs/rapport.pdf", "rapport.pdf", false, -1, 0, null)
+        assertEquals("rapport.pdf, document PDF", FileDescriptions.spoken(remote, now))
+        assertEquals("", FileDescriptions.visibleDetail(remote))
+
+        val sizeOnly = FileItem("/Docs/rapport.pdf", "rapport.pdf", false, 2_000, 0, null)
+        assertEquals("rapport.pdf, document PDF, 2 kilooctets", FileDescriptions.spoken(sizeOnly, now))
+
+        val dateOnly = FileItem("/Docs/rapport.pdf", "rapport.pdf", false, -1, at(2024, 3, 3), null)
+        assertEquals("rapport.pdf, document PDF, modifié le 3 mars 2024", FileDescriptions.spoken(dateOnly, now))
+        assertEquals(DateFormatter.short(at(2024, 3, 3)), FileDescriptions.visibleDetail(dateOnly))
+
+        // Fichier vide réel : « 0 octet » reste juste ; dossier distant sans compte d'éléments : rien.
+        val empty = FileItem("/Docs/vide.txt", "vide.txt", false, 0, at(2026, 11, 12, 9, 5), null)
+        val txt = FileTypeDescriber.describe("vide.txt", isDirectory = false)
+        assertEquals("vide.txt, $txt, 0 octet, modifié aujourd'hui à 9 h 05", FileDescriptions.spoken(empty, now))
+        val folder = FileItem("/Docs", "Docs", true, 0, 0, null)
+        assertEquals("Docs, dossier", FileDescriptions.spoken(folder, now))
+    }
+}
+
+class ProgressSpeechTest {
+    @Test fun tenths() {
+        assertEquals(0, ProgressSpeech.tenths(9))
+        assertEquals(40, ProgressSpeech.tenths(47))
+        assertEquals(100, ProgressSpeech.tenths(100))
+        assertEquals(30, ProgressSpeech.tenths(0.399f))
+        assertEquals(100, ProgressSpeech.tenths(1.5f))
+    }
 }

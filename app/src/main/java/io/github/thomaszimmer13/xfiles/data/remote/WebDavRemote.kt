@@ -69,7 +69,7 @@ class WebDavRemote(private val server: RemoteServer) : RemoteClient {
                 if (hrefPath == self || hrefPath.isEmpty()) return@mapNotNull null
                 val name = RemoteClient.safeName(URLDecoder.decode(hrefPath.substringAfterLast('/'), "UTF-8")) ?: return@mapNotNull null
                 val isDir = r.getElementsByTagNameNS("DAV:", "collection").length > 0
-                val size = r.getElementsByTagNameNS("DAV:", "getcontentlength").item(0)?.textContent?.trim()?.toLongOrNull() ?: 0L
+                val size = r.getElementsByTagNameNS("DAV:", "getcontentlength").item(0)?.textContent?.trim()?.toLongOrNull() ?: -1L
                 val modified = r.getElementsByTagNameNS("DAV:", "getlastmodified").item(0)?.textContent?.trim()?.let(::parseDate) ?: 0L
                 RemoteEntry(name, RemoteClient.child(path, name), isDir, if (isDir) 0 else size, modified)
             }

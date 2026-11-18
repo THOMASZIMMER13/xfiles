@@ -29,7 +29,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -57,9 +61,25 @@ import io.github.thomaszimmer13.xfiles.ui.components.StatusMessage
 import io.github.thomaszimmer13.xfiles.ui.components.XFilesTopBar
 import io.github.thomaszimmer13.xfiles.ui.components.itemIcon
 import io.github.thomaszimmer13.xfiles.ui.components.rememberFileLauncher
+import io.github.thomaszimmer13.xfiles.ui.explorer.FocusRequest
 import io.github.thomaszimmer13.xfiles.ui.explorer.NameDialog
+import io.github.thomaszimmer13.xfiles.ui.explorer.DetailLine
+import io.github.thomaszimmer13.xfiles.ui.explorer.DetailRow
+import io.github.thomaszimmer13.xfiles.a11y.DateFormatter
+import io.github.thomaszimmer13.xfiles.a11y.FileTypeDescriber
+import io.github.thomaszimmer13.xfiles.a11y.SizeFormatter
+import io.github.thomaszimmer13.xfiles.data.open.FileOpener
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 
 private fun RemoteEntry.asItem() = FileItem(path, name, isDirectory, size, lastModified, null)
+
+/** Élément de [parent] (chemin distant) qui mène vers [target] : celui d'où l'on revient. */
+internal fun remoteChildToward(parent: String, target: String?): String? {
+    val prefix = if (parent == "/") "/" else "$parent/"
+    if (target == null || !target.startsWith(prefix) || target.length <= prefix.length) return null
+    return prefix + target.removePrefix(prefix).substringBefore('/')
+}
 
 /**
  * Dossier d'un serveur : une ligne par élément (nom, taille, date), actions Télécharger, Renommer,
@@ -67,7 +87,15 @@ private fun RemoteEntry.asItem() = FileItem(path, name, isDirectory, size, lastM
  * dans le téléphone (cache), puis l'ouvre comme un fichier local.
  */
 @Composable
-fun RemoteFolderScreen(serverId: String, path: String, onOpen: (String) -> Unit, onBack: () -> Unit, viewModel: RemoteFolderViewModel = viewModel(key = "remote:$serverId:$path")) {
+fun RemoteFolderScreen(
+    serverId: String,
+    path: String,
+    onOpen: (String) -> Unit,
+    onBack: () -> Unit,
+    /** Chemin d'où l'on revient : le focus est replacé sur l'élément qui y mène (audit M-06). */
+    focusPath: String? = null,
+    viewModel: RemoteFolderViewModel = viewModel(key = "remote:$serverId:$path"),
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val appLock = remember(context) { (context.applicationContext as io.github.thomaszimmer13.xfiles.XFilesApplication).container.appLock }
     val protect by appLock.protectServers.collectAsStateWithLifecycle()
@@ -86,15 +114,43 @@ fun RemoteFolderScreen(serverId: String, path: String, onOpen: (String) -> Unit,
     val announcement by viewModel.announcer.message.collectAsStateWithLifecycle()
     val launcher = rememberFileLauncher(onRoute = onOpen, onProblem = { viewModel.announcer.announce(it) })
     val titleFocus = remember { FocusRequester() }
-    FocusOnceEffect(ready = !state.loading && !state.locked) { titleFocus.requestFocus() }
+    val itemFocus = remember { FocusRequester() }
+    val listState = rememberLazyListState()
+    val focusTarget = remoteChildToward(path, focusPath)
+    FocusOnceEffect(ready = !state.loading && !state.locked) {
+        val index = state.entries.indexOfFirst { it.path == focusTarget }
+        if (index >= 0) {
+            listState.scrollToItem(index)
+            withFrameNanos { }
+            runCatching { itemFocus.requestFocus() }.onFailure { titleFocus.requestFocus() }
+        } else {
+            titleFocus.requestFocus()
+        }
+    }
+    // Ligne qui porte itemFocus : gardée après la demande, pour que l'élément reste focalisable.
+    var focusedPath by remember { mutableStateOf(focusTarget) }
+    RemoteFocusEffect(state.entries, state.focusRequest, listState, itemFocus, titleFocus, { focusedPath = it }, viewModel::consumeFocusRequest)
     var newFolder by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<RemoteEntry?>(null) }
     var deleting by remember { mutableStateOf<RemoteEntry?>(null) }
+    var details by remember { mutableStateOf<RemoteEntry?>(null) }
+    val pathLabel = stringResource(R.string.details_path)
+    val pathCopied = stringResource(R.string.path_copied)
+    val copyPath: (RemoteEntry) -> Unit = { entry ->
+        FileOpener.copyToClipboard(context, pathLabel, viewModel.displayPath(entry))
+        viewModel.announcer.announce(pathCopied)
+    }
 
     LaunchedEffect(state.opened) {
         state.opened?.let {
             viewModel.consumeOpened()
             launcher.open(it.path, it.name, false)
+        }
+    }
+    LaunchedEffect(state.sharing) {
+        state.sharing?.let {
+            viewModel.consumeSharing()
+            launcher.share(it.path, it.name)
         }
     }
 
@@ -132,9 +188,10 @@ fun RemoteFolderScreen(serverId: String, path: String, onOpen: (String) -> Unit,
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
                 val percent = t.fraction?.let { (it * 100).toInt() }
                 val label = if (percent != null) "${t.label} : $percent %" else t.label
+                val spokenLabel = t.fraction?.let { "${t.label} : ${io.github.thomaszimmer13.xfiles.a11y.ProgressSpeech.tenths(it)} %" } ?: t.label
                 Column(
-                    Modifier.weight(1f).semantics(mergeDescendants = true) {
-                        contentDescription = label
+                    Modifier.weight(1f).clearAndSetSemantics {
+                        contentDescription = spokenLabel
                         t.fraction?.let { progressBarRangeInfo = ProgressBarRangeInfo(it, 0f..1f) }
                     },
                 ) {
@@ -159,16 +216,22 @@ fun RemoteFolderScreen(serverId: String, path: String, onOpen: (String) -> Unit,
                 }
             }
             state.entries.isEmpty() -> Text(stringResource(R.string.folder_empty), modifier = Modifier.padding(16.dp))
-            else -> LazyColumn(Modifier.weight(1f)) {
-                items(state.entries, key = { it.path }) { entry ->
-                    EntryRow(
-                        entry = entry,
-                        onOpen = { if (entry.isDirectory) onOpen(Routes.remote(serverId, entry.path)) else viewModel.open(entry) },
-                        onDownload = { viewModel.download(entry) },
-                        onRename = { renaming = entry },
-                        onDelete = { deleting = entry },
-                    )
-                }
+            else -> RemoteEntryList(
+                entries = state.entries,
+                listState = listState,
+                itemFocus = itemFocus,
+                focusedPath = focusedPath,
+                modifier = Modifier.weight(1f),
+            ) { entry ->
+                        EntryActions(
+                            open = { if (entry.isDirectory) onOpen(Routes.remote(serverId, entry.path)) else viewModel.open(entry) },
+                            download = { viewModel.download(entry) },
+                            share = if (entry.isDirectory) null else ({ viewModel.share(entry) }),
+                            rename = { renaming = entry },
+                            details = { details = entry },
+                            copyPath = { copyPath(entry) },
+                            delete = { deleting = entry },
+                        )
             }
         }
     }
@@ -204,6 +267,14 @@ fun RemoteFolderScreen(serverId: String, path: String, onOpen: (String) -> Unit,
             dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.action_cancel)) } },
         )
     }
+    details?.let { entry ->
+        RemoteDetailsDialog(
+            entry = entry,
+            serverName = server?.name.orEmpty(),
+            onCopyPath = { details = null; copyPath(entry) },
+            onDismiss = { details = null },
+        )
+    }
     state.hostKey?.let { key ->
         AlertDialog(
             onDismissRequest = viewModel::rejectHostKey,
@@ -215,13 +286,80 @@ fun RemoteFolderScreen(serverId: String, path: String, onOpen: (String) -> Unit,
     }
 }
 
+/**
+ * Après une création, un renommage ou une suppression (audit M-06) : focus sur l'élément concerné
+ * ou son voisin, sinon sur le titre (dossier devenu vide).
+ */
 @Composable
-private fun EntryRow(entry: RemoteEntry, onOpen: () -> Unit, onDownload: () -> Unit, onRename: () -> Unit, onDelete: () -> Unit) {
+internal fun RemoteFocusEffect(
+    entries: List<RemoteEntry>,
+    focusRequest: FocusRequest?,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    itemFocus: FocusRequester,
+    titleFocus: FocusRequester,
+    /** Ligne à munir de [itemFocus] avant la demande de focus. */
+    onFocusPath: (String) -> Unit,
+    onConsumed: () -> Unit,
+) {
+    LaunchedEffect(focusRequest, entries) {
+        when (focusRequest) {
+            null -> return@LaunchedEffect
+            FocusRequest.Title -> {
+                withFrameNanos { }
+                runCatching { titleFocus.requestFocus() }
+            }
+            is FocusRequest.Item -> {
+                val index = entries.indexOfFirst { it.path == focusRequest.path }
+                if (index < 0) return@LaunchedEffect
+                onFocusPath(focusRequest.path)
+                listState.scrollToItem(index)
+                withFrameNanos { }
+                withFrameNanos { }
+                runCatching { itemFocus.requestFocus() }
+            }
+        }
+        onConsumed()
+    }
+}
+
+/** Liste d'un dossier distant : une ligne TalkBack par élément ; [focusedPath] reçoit [itemFocus]. */
+@Composable
+internal fun RemoteEntryList(
+    entries: List<RemoteEntry>,
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    itemFocus: FocusRequester,
+    focusedPath: String?,
+    modifier: Modifier = Modifier,
+    actionsFor: (RemoteEntry) -> EntryActions,
+) {
+    LazyColumn(modifier, state = listState) {
+        items(entries, key = { it.path }) { entry ->
+            EntryRow(entry = entry, focusRequester = if (entry.path == focusedPath) itemFocus else null, actions = actionsFor(entry))
+        }
+    }
+}
+
+/** Actions d'une ligne ; [share] est null pour un dossier. */
+internal class EntryActions(
+    val open: () -> Unit,
+    val download: () -> Unit,
+    val share: (() -> Unit)?,
+    val rename: () -> Unit,
+    val details: () -> Unit,
+    val copyPath: () -> Unit,
+    val delete: () -> Unit,
+)
+
+@Composable
+private fun EntryRow(entry: RemoteEntry, focusRequester: FocusRequester?, actions: EntryActions) {
     val item = entry.asItem()
     val spoken = FileDescriptions.spoken(item)
     val openLabel = stringResource(R.string.action_open)
     val downloadLabel = stringResource(R.string.remote_download)
+    val shareLabel = stringResource(R.string.action_share)
     val renameLabel = stringResource(R.string.action_rename)
+    val detailsLabel = stringResource(R.string.action_details)
+    val copyPathLabel = stringResource(R.string.action_copy_path)
     val deleteLabel = stringResource(R.string.remote_delete)
     Column {
         Row(
@@ -229,15 +367,19 @@ private fun EntryRow(entry: RemoteEntry, onOpen: () -> Unit, onDownload: () -> U
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = 56.dp)
-                .clickable(onClick = onOpen)
+                .then(if (focusRequester != null) Modifier.focusRequester(focusRequester).focusable() else Modifier)
+                .clickable(onClick = actions.open)
                 .clearAndSetSemantics {
                     contentDescription = spoken
-                    onClick(label = openLabel) { onOpen(); true }
-                    customActions = listOf(
-                        CustomAccessibilityAction(downloadLabel) { onDownload(); true },
-                        CustomAccessibilityAction(renameLabel) { onRename(); true },
-                        CustomAccessibilityAction(deleteLabel) { onDelete(); true },
-                    )
+                    onClick(label = openLabel) { actions.open(); true }
+                    customActions = buildList {
+                        add(CustomAccessibilityAction(downloadLabel) { actions.download(); true })
+                        actions.share?.let { share -> add(CustomAccessibilityAction(shareLabel) { share(); true }) }
+                        add(CustomAccessibilityAction(renameLabel) { actions.rename(); true })
+                        add(CustomAccessibilityAction(detailsLabel) { actions.details(); true })
+                        add(CustomAccessibilityAction(copyPathLabel) { actions.copyPath(); true })
+                        add(CustomAccessibilityAction(deleteLabel) { actions.delete(); true })
+                    }
                 }
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         ) {
@@ -245,9 +387,36 @@ private fun EntryRow(entry: RemoteEntry, onOpen: () -> Unit, onDownload: () -> U
             Spacer(Modifier.width(16.dp))
             Column {
                 Text(entry.name, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(FileDescriptions.visibleDetail(item), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                val detail = FileDescriptions.visibleDetail(item)
+                if (detail.isNotEmpty()) Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         HorizontalDivider(Modifier.padding(start = 56.dp))
     }
+}
+
+/** Détails d'un élément distant : seules les informations connues du serveur sont lues. */
+@Composable
+private fun RemoteDetailsDialog(entry: RemoteEntry, serverName: String, onCopyPath: () -> Unit, onDismiss: () -> Unit) {
+    val rows = buildList {
+        add(DetailRow(stringResource(R.string.details_name), entry.name))
+        add(DetailRow(stringResource(R.string.details_type), FileTypeDescriber.describe(entry.name, entry.isDirectory).replaceFirstChar { it.uppercase() }))
+        if (!entry.isDirectory && entry.size >= 0) {
+            add(DetailRow(stringResource(R.string.details_size), SizeFormatter.short(entry.size), "${SizeFormatter.spoken(entry.size)}, ${entry.size} octets"))
+        }
+        if (entry.lastModified > 0) add(DetailRow(stringResource(R.string.details_modified), DateFormatter.full(entry.lastModified)))
+        add(DetailRow(stringResource(R.string.details_location), serverName))
+        add(DetailRow(stringResource(R.string.details_path), entry.path))
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.details_title), modifier = Modifier.semantics { heading() }) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.verticalScroll(rememberScrollState())) {
+                rows.forEach { DetailLine(it) }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_close)) } },
+        dismissButton = { TextButton(onClick = onCopyPath) { Text(stringResource(R.string.action_copy_path)) } },
+    )
 }

@@ -1,0 +1,36 @@
+# Active PKCE (RFC 7636) pour Google Drive, OneDrive et Dropbox : un code d'autorisation
+# intercepté sur le port local 53682 par une autre app ne peut plus être échangé (audit H-05).
+# Appliqué par patch.sh sur une copie du module officiel (le cache Go reste intact).
+diff -ru a/backend/drive/drive.go b/backend/drive/drive.go
+--- a/backend/drive/drive.go
++++ b/backend/drive/drive.go
+@@ -88,6 +88,7 @@
+ 		ClientID:     rcloneClientID,
+ 		ClientSecret: obscure.MustReveal(rcloneEncryptedClientSecret),
+ 		RedirectURL:  oauthutil.RedirectURL,
++		UsePKCE:      true, // XFiles : PKCE (RFC 7636), le code intercepté sur le port local est inutilisable
+ 	}
+ 	_mimeTypeToExtensionDuplicates = map[string]string{
+ 		"application/x-vnd.oasis.opendocument.presentation": ".odp",
+diff -ru a/backend/dropbox/dropbox.go b/backend/dropbox/dropbox.go
+--- a/backend/dropbox/dropbox.go
++++ b/backend/dropbox/dropbox.go
+@@ -119,6 +119,7 @@
+ 		ClientID:     rcloneClientID,
+ 		ClientSecret: obscure.MustReveal(rcloneEncryptedClientSecret),
+ 		RedirectURL:  oauthutil.RedirectLocalhostURL,
++		UsePKCE:      true, // XFiles : PKCE (RFC 7636), le code intercepté sur le port local est inutilisable
+ 	}
+ 	// A regexp matching path names for files Dropbox ignores
+ 	// See https://www.dropbox.com/en/help/145 - Ignored files
+diff -ru a/backend/onedrive/onedrive.go b/backend/onedrive/onedrive.go
+--- a/backend/onedrive/onedrive.go
++++ b/backend/onedrive/onedrive.go
+@@ -95,6 +95,7 @@
+ 		ClientID:     rcloneClientID,
+ 		ClientSecret: obscure.MustReveal(rcloneEncryptedClientSecret),
+ 		RedirectURL:  oauthutil.RedirectLocalhostURL,
++		UsePKCE:      true, // XFiles : PKCE (RFC 7636), le code intercepté sur le port local est inutilisable
+ 	}
+ 
+ 	graphAPIEndpoint = map[string]string{

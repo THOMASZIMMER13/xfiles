@@ -19,4 +19,16 @@ class VaultsTest {
         val server = RemoteServer("vault-2", Protocol.VAULT, "Banque", "xf1a2b:Coffres XFiles/Banque")
         assertEquals(":crypt,remote='xf1a2b:Coffres XFiles/Banque',password='k'", Vaults.remoteOf(server, "k"))
     }
+
+    /** Audit F-07 : mauvais mot de passe d'un côté, panne de l'autre. */
+    @Test fun wrongPasswordIsTellableFromFailures() {
+        fun e(reason: io.github.thomaszimmer13.xfiles.data.remote.RemoteException.Reason, m: String = "") =
+            io.github.thomaszimmer13.xfiles.data.remote.RemoteException(reason, m)
+        val r = io.github.thomaszimmer13.xfiles.data.remote.RemoteException.Reason.entries.associateBy { it.name }
+        org.junit.Assert.assertTrue(Vaults.wrongPassword(e(r.getValue("NOT_FOUND"))))
+        org.junit.Assert.assertTrue(Vaults.wrongPassword(e(r.getValue("PROTOCOL"), "/.xfiles-coffre : failed to authenticate decrypted block - bad password?")))
+        org.junit.Assert.assertFalse(Vaults.wrongPassword(e(r.getValue("PROTOCOL"), "/.xfiles-coffre : unexpected EOF")))
+        org.junit.Assert.assertFalse(Vaults.wrongPassword(e(r.getValue("UNREACHABLE"))))
+        org.junit.Assert.assertFalse(Vaults.wrongPassword(e(r.getValue("AUTH"))))
+    }
 }

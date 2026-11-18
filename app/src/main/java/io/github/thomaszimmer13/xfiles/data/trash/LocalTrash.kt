@@ -95,6 +95,9 @@ class LocalTrash(
             infoFile(entry).delete()
             fail(Reason.NOT_FOUND, entry.name)
         }
+        // Audit F-06 : un fichier d'informations modifié ne doit pas faire sortir l'élément de son
+        // volume ni le renvoyer dans la corbeille elle-même.
+        if (!sameVolume(entry)) fail(Reason.DENIED, entry.name)
         val parent = File(entry.originalPath).parentFile ?: fail(Reason.FAILED, entry.name)
         if (!parent.isDirectory && !parent.mkdirs()) fail(Reason.DENIED, entry.name)
         val name = NameValidator.uniqueName(entry.name, parent.list()?.toList().orEmpty(), keepExtension = !entry.isDirectory)
@@ -131,6 +134,16 @@ class LocalTrash(
     }
 
     /** Dossier de la corbeille du volume qui contient [path] ; null si aucun volume ne le contient. */
+    /** Vrai si le chemin d'origine de [entry] est sur le volume de sa corbeille, hors de celle-ci. */
+    internal fun sameVolume(entry: TrashEntry): Boolean = runCatching {
+        val original = File(entry.originalPath).canonicalFile
+        val trash = File(entry.trashDir).canonicalFile
+        val volume = trash.parentFile ?: return false
+        val inVolume = original.path.startsWith(volume.path.trimEnd(File.separatorChar) + File.separator)
+        val inTrash = original == trash || original.path.startsWith(trash.path + File.separator)
+        inVolume && !inTrash && trashDirFor(original.path)?.canonicalFile == trash
+    }.getOrDefault(false)
+
     fun trashDirFor(path: String): File? = volumeRoots()
         .filter { path.startsWith("$it/") }
         .maxByOrNull { it.length }

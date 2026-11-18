@@ -60,6 +60,8 @@ object ZipArchive {
      * @return chemin de ce qui a été créé au premier niveau.
      */
     fun extract(zipPath: String, prefix: String?, targetDir: File, listener: TransferListener = TransferListener.NONE): String {
+        @Suppress("NAME_SHADOWING")
+        val listener = listener as? ExtractGuard ?: ExtractGuard(targetDir, listener)
         if (!targetDir.isDirectory || !targetDir.canWrite()) throw FileOperationException(Reason.DENIED, targetDir.path)
         // Toute l'archive : dans un nouveau dossier au nom de l'archive (« Photos.zip » → « Photos »).
         val topName = prefix?.substringAfterLast('/') ?: File(zipPath).name.removeSuffix(".zip").removeSuffix(".ZIP")
@@ -81,7 +83,8 @@ object ZipArchive {
                         relative == topName -> top
                         else -> File(top, relative.removePrefix("$topName/"))
                     }
-                    if (!dest.canonicalPath.startsWith(top.canonicalPath)) continue
+                    // F-01 : « /x/Photos2 » commence par « /x/Photos » : le séparateur est exigé.
+                    if (!Archives.isInside(top, dest)) continue
                     if (e.isDirectory) {
                         dest.mkdirs()
                     } else {

@@ -79,9 +79,17 @@ class ZipViewModel(application: Application) : AndroidViewModel(application) {
     val announcer = Announcer(viewModelScope)
     val passwordGate = PasswordGate(viewModelScope)
 
+    /** Archive refermée (écran quitté) : ses mots de passe sont oubliés (audit F-04). */
+    override fun onCleared() {
+        passwordGate.clear()
+        super.onCleared()
+    }
+
     /** Lit l'archive (une seule fois tant qu'on reste dans la même). */
     fun load(zipPath: String) {
         if (_state.value.zipPath == zipPath && _state.value.error == null && !_state.value.loading) return
+        // Autre archive : le mot de passe de la précédente n'est plus gardé (audit F-04).
+        if (_state.value.zipPath != null && _state.value.zipPath != zipPath) passwordGate.clear()
         _state.value = ZipUiState(zipPath = zipPath)
         list(zipPath, passwordGate.knownPassword(zipPath))
     }

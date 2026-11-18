@@ -13,6 +13,8 @@ import io.github.thomaszimmer13.xfiles.data.remote.RemoteException
 import io.github.thomaszimmer13.xfiles.data.remote.RemoteServer
 import io.github.thomaszimmer13.xfiles.domain.NameValidator
 import io.github.thomaszimmer13.xfiles.ui.components.Announcer
+import io.github.thomaszimmer13.xfiles.ui.explorer.FocusRequest
+import io.github.thomaszimmer13.xfiles.ui.explorer.neighborFocus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,6 +45,10 @@ data class RemoteFolderUiState(
     val unlocking: Boolean = false,
     /** Coffre tout juste ouvert : sceller son mot de passe par l'empreinte (fenêtre à afficher). */
     val sealRequest: Boolean = false,
+    /** Où placer le focus TalkBack après une création, un renommage ou une suppression (audit M-06). */
+    val focusRequest: FocusRequest? = null,
+    /** Fichier téléchargé dans le cache, à partager. */
+    val sharing: File? = null,
 )
 
 class RemoteFolderViewModel(application: Application) : AndroidViewModel(application) {
@@ -166,26 +172,36 @@ class RemoteFolderViewModel(application: Application) : AndroidViewModel(applica
     }
 
     fun refresh() {
-        val server = _state.value.server ?: return
+        viewModelScope.launch { reload() }
+    }
+
+    /** Relit le dossier ; vrai si la liste a pu être chargée. */
+    private suspend fun reload(): Boolean {
+        val server = _state.value.server ?: return false
         val path = _state.value.path
         _state.update { it.copy(loading = true, error = null) }
-        viewModelScope.launch {
+        return run {
             try {
                 val entries = sessions.use(server) { it.list(path) }
                     .filter { !it.name.startsWith(".") }
                     .sortedWith(compareBy<RemoteEntry> { !it.isDirectory }.thenComparator { a, b -> collator.compare(a.name, b.name) })
                 _state.update { it.copy(loading = false, entries = entries) }
+                true
             } catch (e: HostKeyException) {
                 _state.update { it.copy(loading = false, hostKey = e) }
+                false
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 val message = errorText(e)
                 _state.update { it.copy(loading = false, error = message) }
                 announcer.announce(message)
+                false
             }
         }
     }
+
+    fun consumeFocusRequest() = _state.update { it.copy(focusRequest = null) }
 
     /** Clé SFTP acceptée : enregistrée avec le serveur, puis connexion. */
     fun trustHostKey() {
@@ -203,14 +219,21 @@ class RemoteFolderViewModel(application: Application) : AndroidViewModel(applica
     fun rejectHostKey() = _state.update { it.copy(hostKey = null, loading = false, error = text(R.string.remote_host_key_rejected)) }
 
     /** Fichier : copié dans le cache (réutilisé s'il n'a pas changé), puis ouvert. */
-    fun open(entry: RemoteEntry) {
+    fun open(entry: RemoteEntry) = cached(entry, share = false)
+
+    /** Fichier : copié dans le cache, puis proposé au menu Partager d'Android. */
+    fun share(entry: RemoteEntry) = cached(entry, share = true)
+
+    private fun cached(entry: RemoteEntry, share: Boolean) {
         val server = _state.value.server ?: return
+        if (entry.isDirectory) return
+        val ready: (File) -> Unit = { f -> _state.update { if (share) it.copy(sharing = f) else it.copy(opened = f) } }
         val root = File(getApplication<Application>().cacheDir, "remote/${server.id}")
         val target = File(root, entry.path.trimStart('/'))
         // Nom piégé venu du serveur : jamais d'écriture hors du cache de ce serveur (C-01).
         if (!RemoteClient.inside(root, target) || target == root) return announcer.announce(text(R.string.remote_error_protocol))
         if (target.exists() && target.length() == entry.size && (entry.lastModified == 0L || target.lastModified() == entry.lastModified)) {
-            _state.update { it.copy(opened = target) }
+            ready(target)
             return
         }
         transfer(text(R.string.remote_opening, entry.name)) { onProgress ->
@@ -219,12 +242,17 @@ class RemoteFolderViewModel(application: Application) : AndroidViewModel(applica
             sessions.use(server) { c -> tmp.outputStream().use { out -> c.download(entry.path, out) { done, total -> onProgress(done, if (total > 0) total else entry.size) } } }
             tmp.renameTo(target)
             if (entry.lastModified > 0) target.setLastModified(entry.lastModified)
-            _state.update { it.copy(opened = target) }
+            ready(target)
             null
         }
     }
 
     fun consumeOpened() = _state.update { it.copy(opened = null) }
+
+    fun consumeSharing() = _state.update { it.copy(sharing = null) }
+
+    /** Chemin lisible d'un élément : « Mon NAS : /Documents/rapport.pdf ». */
+    fun displayPath(entry: RemoteEntry): String = "${_state.value.server?.name.orEmpty()} : ${entry.path}"
 
     /** Copie dans Téléchargements (dossier entier compris). */
     fun download(entry: RemoteEntry) {
@@ -293,24 +321,34 @@ class RemoteFolderViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    fun mkdir(name: String) = simple(text(R.string.folder_created, name)) { c -> c.mkdir(RemoteClient.child(_state.value.path, name)) }
-
-    fun rename(entry: RemoteEntry, newName: String) = simple(text(R.string.renamed, newName)) { c ->
-        c.rename(entry.path, RemoteClient.child(RemoteClient.parent(entry.path), newName))
+    fun mkdir(name: String) {
+        val created = RemoteClient.child(_state.value.path, name)
+        simple(text(R.string.folder_created, name), FocusRequest.Item(created)) { c -> c.mkdir(created) }
     }
 
-    fun delete(entry: RemoteEntry) = simple(text(R.string.remote_deleted, entry.name)) { c -> c.delete(entry.path, entry.isDirectory) }
+    fun rename(entry: RemoteEntry, newName: String) {
+        val renamed = RemoteClient.child(RemoteClient.parent(entry.path), newName)
+        simple(text(R.string.renamed, newName), FocusRequest.Item(renamed)) { c -> c.rename(entry.path, renamed) }
+    }
+
+    /** Après la suppression, le focus va au voisin (suivant, sinon précédent, sinon titre). */
+    fun delete(entry: RemoteEntry) =
+        simple(text(R.string.remote_deleted, entry.name), neighborFocus(_state.value.entries, entry.path) { it.path }) { c -> c.delete(entry.path, entry.isDirectory) }
 
     fun names(): List<String> = _state.value.entries.map { it.name }
 
-    private fun simple(done: String, block: (RemoteClient) -> Unit) {
+    private fun simple(done: String, focus: FocusRequest? = null, block: (RemoteClient) -> Unit) {
         val server = _state.value.server ?: return
         viewModelScope.launch {
             try {
                 sessions.use(server, block)
                 container.feedback.success()
                 announcer.announce(done)
-                refresh()
+                if (reload() && focus != null) {
+                    // L'élément visé doit exister dans la nouvelle liste ; sinon, le titre.
+                    val target = (focus as? FocusRequest.Item)?.takeIf { f -> _state.value.entries.any { it.path == f.path } }
+                    _state.update { it.copy(focusRequest = target ?: FocusRequest.Title) }
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -361,7 +399,14 @@ class RemoteFolderViewModel(application: Application) : AndroidViewModel(applica
         return File(file.parentFile, name)
     }
 
-    fun errorText(e: Throwable): String = remoteErrorText(getApplication(), e, _state.value.server?.protocol?.cloud == true)
+    fun errorText(e: Throwable): String {
+        val cloud = _state.value.server?.protocol?.cloud == true
+        // Comptes perdus parce que leur configuration était abîmée : on le dit plutôt qu'« accès refusé ».
+        if (cloud && container.rclone.configWasReset && e is RemoteException && e.reason == RemoteException.Reason.AUTH) {
+            return text(R.string.cloud_config_reset)
+        }
+        return remoteErrorText(getApplication(), e, cloud)
+    }
 }
 
 /** Message d'erreur annoncé pour une opération distante. */

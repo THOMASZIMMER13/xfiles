@@ -24,7 +24,8 @@ android {
         // chaque utilisateur saisit le sien.
         buildConfigField("String", "GDRIVE_CLIENT_ID", "\"${System.getenv("XFILES_GDRIVE_CLIENT_ID").orEmpty()}\"")
         buildConfigField("String", "GDRIVE_CLIENT_SECRET", "\"${System.getenv("XFILES_GDRIVE_CLIENT_SECRET").orEmpty()}\"")
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+        // x86_64 : émulateurs et Chromebook (libarchive, rclone et ONNX Runtime y sont compilés).
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
     }
 
     signingConfigs {
@@ -79,7 +80,7 @@ android {
         abi {
             isEnable = true
             reset()
-            include("arm64-v8a", "armeabi-v7a")
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
             isUniversalApk = true
         }
     }
@@ -98,7 +99,8 @@ android {
 val rcloneAar = layout.buildDirectory.file("rclone/rclone.aar")
 val buildRclone = tasks.register<Exec>("buildRclone") {
     val src = rootProject.file("rclone")
-    inputs.files(fileTree(src) { include("**/*.go", "go.mod", "go.sum", "build.sh") })
+    // third_party/ : copie patchée produite par patch.sh à partir de go.mod et patches/.
+    inputs.files(fileTree(src) { include("**/*.go", "go.mod", "go.sum", "build.sh", "patch.sh", "patches/**"); exclude("third_party/**") })
     outputs.file(rcloneAar)
     workingDir = src
     executable("bash")
@@ -106,6 +108,41 @@ val buildRclone = tasks.register<Exec>("buildRclone") {
     argumentProviders.add(CommandLineArgumentProvider { listOf("build.sh", rcloneAar.get().asFile.absolutePath, sdk.get().asFile.absolutePath) })
 }
 tasks.named("preBuild") { dependsOn(buildRclone) }
+
+// libarchive (BSD-2) réduit aux RAR 4, RAR 5 et ISO 9660, avec son pont JNI : dossier « native »,
+// compilé par CMake et le NDK (sources figées et vérifiées par build.sh). Pré-requis : cmake, ninja.
+val nativeSrc = rootProject.file("app/native")
+val nativeInputs = fileTree(nativeSrc) { include("*.c", "CMakeLists.txt", "build.sh") }
+val libarchiveJni = layout.buildDirectory.dir("libarchive/jniLibs")
+val buildLibarchive = tasks.register<Exec>("buildLibarchive") {
+    inputs.files(nativeInputs)
+    outputs.dir(libarchiveJni)
+    workingDir = nativeSrc
+    executable("bash")
+    val sdk = androidComponents.sdkComponents.sdkDirectory
+    argumentProviders.add(CommandLineArgumentProvider {
+        listOf("build.sh", libarchiveJni.get().asFile.absolutePath, sdk.get().asFile.absolutePath, "arm64-v8a", "armeabi-v7a", "x86_64")
+    })
+}
+tasks.named("preBuild") { dependsOn(buildLibarchive) }
+// Chemin fixe (AGP refuse un Provider ici) ; la dépendance est assurée par preBuild ci-dessus.
+android.sourceSets.getByName("main").jniLibs.srcDir(libarchiveJni.get().asFile)
+
+// Même bibliothèque compilée pour la machine : les tests JVM lisent de vraies archives RAR.
+val libarchiveHost = layout.buildDirectory.dir("libarchive/host-out")
+val buildLibarchiveHost = tasks.register<Exec>("buildLibarchiveHost") {
+    inputs.files(nativeInputs)
+    outputs.dir(libarchiveHost)
+    workingDir = nativeSrc
+    executable("bash")
+    val sdk = androidComponents.sdkComponents.sdkDirectory
+    argumentProviders.add(CommandLineArgumentProvider { listOf("build.sh", libarchiveHost.get().asFile.absolutePath, sdk.get().asFile.absolutePath, "host") })
+}
+tasks.withType<Test>().configureEach {
+    dependsOn(buildLibarchiveHost)
+    systemProperty("xfiles.libarchive", layout.buildDirectory.file("libarchive/host-out/host/libxfarchive.so").get().asFile.absolutePath)
+    systemProperty("xfiles.libarchive.tests", rootProject.file("app/native/third_party/libarchive/libarchive/test").absolutePath)
+}
 
 dependencies {
     implementation(files(rcloneAar).builtBy(buildRclone))
@@ -124,10 +161,10 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
-    // Archives : 7z, tar, gz, bz2, xz (Commons Compress + XZ), RAR 4 (junrar), zip chiffrés (zip4j).
+    // Archives : 7z, tar, gz, bz2, xz (Commons Compress + XZ), zip chiffrés (zip4j) ;
+    // RAR 4, RAR 5 et ISO par libarchive (dossier « native », BSD-2 ; junrar retiré, licence non libre).
     implementation(libs.commons.compress)
     implementation(libs.xz)
-    implementation(libs.junrar)
     implementation(libs.zip4j)
 
     // Lecteur audio et vidéo

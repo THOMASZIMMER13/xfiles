@@ -8,6 +8,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -137,6 +138,7 @@ object Routes {
         is Route.Zip -> r.path
         is Route.DocumentView -> r.path
         is Route.Editor -> r.path
+        is Route.Remote -> r.path
         else -> null
     }
 }
@@ -211,6 +213,15 @@ fun BrowserStack(
     BackHandler(enabled = backEnabled && current != null) { goUp() }
     LaunchedEffect(current) { onCurrentChange(current) }
 
+    // Dernière archive refermée dans cette pile : ses mots de passe sont oubliés (audit F-04).
+    val inArchive = stack.any { Routes.parse(it) is Routes.Route.Zip }
+    val zipViewModel: io.github.thomaszimmer13.xfiles.ui.zip.ZipViewModel = androidx.lifecycle.viewmodel.compose.viewModel()
+    var wasInArchive by remember { mutableStateOf(inArchive) }
+    LaunchedEffect(inArchive) {
+        if (wasInArchive && !inArchive) zipViewModel.passwordGate.clear()
+        wasInArchive = inArchive
+    }
+
     // Retour à la racine demandé par la barre d'onglets (signal déjà traité mémorisé pour ignorer
     // la valeur initiale et les recompositions).
     var handledReset by rememberSaveable { mutableIntStateOf(resetSignal) }
@@ -245,7 +256,13 @@ fun BrowserStack(
             is Routes.Route.CategoryList -> CategoryScreen(route.category, onOpen = ::open, onReveal = ::reveal, onBack = ::goUp)
             is Routes.Route.Cleanup -> CleanupScreen(route.kind, onReveal = ::reveal, onBack = ::goUp)
             is Routes.Route.DocumentView -> DocumentScreen(path = route.path, onOpen = ::open, onBack = ::goUp, ocr = route.ocr)
-            is Routes.Route.Remote -> RemoteFolderScreen(serverId = route.serverId, path = route.path, onOpen = ::open, onBack = ::goUp)
+            is Routes.Route.Remote -> RemoteFolderScreen(
+                serverId = route.serverId,
+                path = route.path,
+                focusPath = Routes.focusPathOf(cameFrom),
+                onOpen = ::open,
+                onBack = ::goUp,
+            )
             is Routes.Route.ServerEdit -> ServerEditScreen(serverId = route.serverId, cloud = route.cloud, onBack = ::goUp)
             is Routes.Route.BatchRename -> BatchRenameScreen(generation = route.generation, onBack = ::goUp)
             is Routes.Route.Scanner -> ScannerScreen(directory = route.directory, onOpen = ::open, onBack = ::goUp)

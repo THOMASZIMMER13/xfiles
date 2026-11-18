@@ -37,7 +37,8 @@ indispensable à un gestionnaire de fichiers, puis, lors de la première copie l
 
 ## Feuille de route
 
-- Autres formats d'archive : WIM, RAR5, ISO.
+- Format d'archive WIM (libarchive ne le lit pas : il faudrait wimlib).
+- RAR chiffrés (libarchive sait les reconnaître, pas les déchiffrer).
 
 ## Compiler
 
@@ -50,6 +51,8 @@ L'APK release est optimisé par R8 (code et ressources inutilisés retirés).
 
 Pré-requis : JDK 17 ou plus. Android Gradle Plugin 9, Kotlin, Jetpack Compose (Material 3) ;
 compilé avec le SDK 37, cible l'API 36, minimum l'API 30.
+Le pont rclone demande Go et le NDK Android ; libarchive (RAR, ISO) est compilée depuis ses sources
+(version et commit figés dans `app/native/build.sh`) avec le NDK 29.0.14206865, cmake et ninja.
 
 ## CI, signature et publication
 
