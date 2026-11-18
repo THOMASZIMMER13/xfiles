@@ -104,11 +104,12 @@ class TransferManager(
     }
 
     /** Colle le presse-papiers dans [dir]. Renvoie false si une opération est déjà en cours. */
-    fun paste(clip: ClipContent, dir: String, folder: String): Boolean {
+    fun paste(clip: ClipContent, dir: String, folder: String, focusResult: Boolean = true): Boolean {
         val kind = if (clip.mode == TransferMode.COPY) TransferKind.COPY else TransferKind.MOVE
         val subject = subjectFor(clip.items.size, clip.items.first().name)
         return launchJob(kind, subject, folder, total = { clip.items.sumOf { sizeOf(File(it.path)) } }) { tracker ->
-            pasteItems(clip, dir, folder, tracker)
+            // Vers l'autre panneau : le focus TalkBack reste là où l'on est.
+            pasteItems(clip, dir, folder, tracker).let { if (focusResult) it else it.copy(focusPath = null) }
         }
     }
 

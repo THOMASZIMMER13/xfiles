@@ -35,3 +35,7 @@
 # Pont rclone (gomobile) : classes appelées depuis le code natif Go.
 -keep class go.** { *; }
 -keep class io.github.thomaszimmer13.xfiles.rclone.** { *; }
+
+# Shizuku : le service de fichiers est créé par son nom dans le processus de Shizuku.
+-keep class io.github.thomaszimmer13.xfiles.data.shizuku.FileService { <init>(); *; }
+-keep class io.github.thomaszimmer13.xfiles.data.shizuku.IFileService** { *; }

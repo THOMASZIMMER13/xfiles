@@ -75,6 +75,29 @@ Première version publique : un gestionnaire de fichiers pensé d'abord pour Tal
 - Espace utilisé annoncé après la connexion et le test ; documents Google ouverts en .docx, .xlsx, .pptx.
 - Jetons chiffrés (Keystore d'Android) ; « Retirer le compte » les efface du téléphone.
 
+### Onglets et double panneau
+- Réglages, section Explorer : « Onglets » et « Double panneau », désactivés par défaut.
+- Onglets : barre en haut de l'Explorer, un élément par onglet (« Documents, onglet, sélectionné, 2 sur 3 »), action « Fermer l'onglet », bouton « Nouvel onglet » ; action « Ouvrir dans un nouvel onglet » sur les dossiers. Chaque onglet garde son dossier et son défilement.
+- Double panneau : deux dossiers ensemble (côte à côte sur grand écran, l'un sous l'autre sinon), chacun avec son titre « Panneau 1 : Documents » ; le retour arrière agit sur le panneau utilisé.
+- Actions « Copier vers… » et « Déplacer vers… » le dossier de l'autre panneau, sur un élément et sur la sélection ; le focus reste où l'on est.
+
+### Données des applications (Shizuku)
+- Dossiers Android/data, Android/obb et Android/media, grâce à l'application gratuite Shizuku (facultatif).
+- Réglages, Sécurité, « Données des applications » : état annoncé (non installé, arrêté, autorisation à donner, actif) avec le bouton de l'étape suivante, et guide pas à pas (options pour les développeurs, débogage sans fil, appairage, redémarrage, téléphone rooté).
+- « Afficher dans l'Explorer » ajoute l'entrée sous « Sur l'appareil ». Mêmes actions qu'un serveur : ouvrir, télécharger, envoyer ici, renommer, supprimer, nouveau dossier.
+
+### Sécurité
+- « Verrouiller XFiles » : empreinte, visage ou code du téléphone à l'ouverture, délai au choix (dès la sortie, 1, 5 ou 15 minutes) ; contenu masqué dans les applications récentes (Android 13 et plus).
+- « Confirmer mon identité avant les serveurs » : une fois par utilisation, avant un serveur, un compte ou un coffre.
+- Activer ou désactiver ces réglages demande l'identité.
+
+### Coffres chiffrés
+- « Nouveau coffre chiffré » dans l'Explorer : sur le téléphone (Documents, Coffres XFiles) ou dans un compte en ligne ; contenus et noms chiffrés par rclone (type crypt, compatible avec rclone sur ordinateur).
+- Mot de passe jamais enregistré en clair ; « Utiliser l'empreinte la prochaine fois » le scelle par une clé du Keystore qui exige l'empreinte (perdu si les empreintes changent : le mot de passe reste valable).
+- Coffre refermé après cinq minutes hors d'XFiles, au verrouillage de l'app, ou par « Verrouiller le coffre » ; les copies déchiffrées ouvertes depuis le coffre sont alors effacées.
+- « Déplacer » puis « Envoyer ici » dans un coffre (ou un serveur) supprime l'original une fois envoyé.
+- Actions de la ligne : Verrouiller le coffre, Ne plus utiliser l'empreinte, Retirer le coffre (les fichiers chiffrés restent).
+
 ### Renommage par lot
 - Depuis la sélection : bouton « Renommer ».
 - Rechercher et remplacer (texte ou expression régulière, avec groupes $1…), ou modèle avec balises {nom}, {n}, {date}, {ext} ; numéro de départ et nombre de chiffres.

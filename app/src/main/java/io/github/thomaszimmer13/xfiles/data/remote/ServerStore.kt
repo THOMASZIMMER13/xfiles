@@ -26,7 +26,17 @@ class ServerStore(context: Context) {
         mutex.withLock { _servers.value = read() }
     }
 
-    fun get(id: String): RemoteServer? = _servers.value.firstOrNull { it.id == id }
+    /** Serveur enregistré, ou le dossier Android par Shizuku (virtuel). */
+    fun get(id: String): RemoteServer? =
+        if (id == io.github.thomaszimmer13.xfiles.data.shizuku.ShizukuAccess.SERVER_ID) shizukuServer
+        else _servers.value.firstOrNull { it.id == id }
+
+    private val shizukuServer = RemoteServer(
+        io.github.thomaszimmer13.xfiles.data.shizuku.ShizukuAccess.SERVER_ID,
+        Protocol.SHIZUKU,
+        context.getString(io.github.thomaszimmer13.xfiles.R.string.shizuku_title),
+        io.github.thomaszimmer13.xfiles.data.shizuku.ShizukuAccess.ROOT,
+    )
 
     suspend fun save(server: RemoteServer) = edit { list ->
         val i = list.indexOfFirst { it.id == server.id }

@@ -40,6 +40,30 @@ class PreferencesRepository(private val context: Context) {
         val DOC_TEXT_SCALE = stringPreferencesKey("doc_text_scale")
         /** Position de lecture des documents : lignes « chemin\tbloc ». */
         val DOC_POSITIONS = stringPreferencesKey("doc_positions")
+        val EXPLORER_TABS = booleanPreferencesKey("explorer_tabs")
+        val DUAL_PANE = booleanPreferencesKey("dual_pane")
+        val SHIZUKU_IN_EXPLORER = booleanPreferencesKey("shizuku_in_explorer")
+    }
+
+    /** « Données des applications » (Shizuku) dans la racine de l'Explorer (désactivé par défaut). */
+    val shizukuInExplorer: Flow<Boolean> = context.dataStore.data.map { it[Keys.SHIZUKU_IN_EXPLORER] ?: false }.distinctUntilChanged()
+
+    suspend fun setShizukuInExplorer(value: Boolean) {
+        context.dataStore.edit { it[Keys.SHIZUKU_IN_EXPLORER] = value }
+    }
+
+    /** Onglets dans l'Explorer, comme dans un navigateur (désactivé par défaut). */
+    val explorerTabs: Flow<Boolean> = context.dataStore.data.map { it[Keys.EXPLORER_TABS] ?: false }.distinctUntilChanged()
+
+    suspend fun setExplorerTabs(value: Boolean) {
+        context.dataStore.edit { it[Keys.EXPLORER_TABS] = value }
+    }
+
+    /** Deux dossiers affichés ensemble dans l'Explorer (désactivé par défaut). */
+    val dualPane: Flow<Boolean> = context.dataStore.data.map { it[Keys.DUAL_PANE] ?: false }.distinctUntilChanged()
+
+    suspend fun setDualPane(value: Boolean) {
+        context.dataStore.edit { it[Keys.DUAL_PANE] = value }
     }
 
     /** Ouvrir les documents (txt, PDF, Word…) dans le lecteur intégré (activé par défaut). */

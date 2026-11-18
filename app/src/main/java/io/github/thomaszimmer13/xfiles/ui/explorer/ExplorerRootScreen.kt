@@ -20,6 +20,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -79,6 +83,14 @@ fun ExplorerRootScreen(
         add("header-device")
         state.locations.forEach { add("loc:" + it.path) }
         add("trash")
+        if (state.shizukuShown) add("shizuku")
+        add("header-servers")
+        state.servers.forEach { add("srv:" + it.id) }
+        add("add-cloud")
+        add("add-server")
+        add("header-vaults")
+        state.vaults.forEach { add("vault:" + it.id) }
+        add("add-vault")
         if (state.favorites.isNotEmpty()) {
             add("header-favorites")
             state.favorites.forEach { add("fav:" + it.path) }
@@ -91,11 +103,33 @@ fun ExplorerRootScreen(
     }
     val listState = rememberLazyListState()
     val rowFocus = remember { FocusRequester() }
+    var removing by remember { mutableStateOf<io.github.thomaszimmer13.xfiles.data.remote.RemoteServer?>(null) }
+    removing?.let { vault ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { removing = null },
+            title = { Text(stringResource(R.string.vault_remove_title), modifier = Modifier.semantics { heading() }) },
+            text = { Text(stringResource(R.string.vault_remove_message, vault.name)) },
+            confirmButton = { androidx.compose.material3.TextButton(onClick = { removing = null; viewModel.removeVault(vault) }) { Text(stringResource(R.string.vault_remove)) } },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { removing = null }) { Text(stringResource(R.string.action_cancel)) } },
+        )
+    }
 
     // Un favori exact (ex. Documents) a priorité sur le volume qui le contient.
     val focusKey: String? = focusPath?.let { target ->
         when {
             target == TRASH_ROUTE -> "trash"
+            target == Routes.SHIZUKU -> "shizuku"
+            target == Routes.VAULT_ADD -> "add-vault"
+            Routes.parse(target) is Routes.Route.Remote -> (Routes.parse(target) as Routes.Route.Remote).serverId.let { id ->
+                when {
+                    id == io.github.thomaszimmer13.xfiles.data.shizuku.ShizukuAccess.SERVER_ID -> "shizuku"
+                    state.vaults.any { it.id == id } -> "vault:$id"
+                    else -> "srv:$id"
+                }
+            }
+            Routes.parse(target) is Routes.Route.ServerEdit -> (Routes.parse(target) as Routes.Route.ServerEdit).let { r ->
+                r.serverId?.let { "srv:$it" } ?: if (r.cloud) "add-cloud" else "add-server"
+            }
             target == Routes.STORAGE -> "storage"
             target == downloads -> "cat:downloads"
             else -> Category.entries.firstOrNull { Routes.category(it) == target }?.let { "cat:" + it.name }
@@ -141,6 +175,22 @@ fun ExplorerRootScreen(
             item(key = "trash") {
                 TrashRow(count = state.trashCount, focusRequester = focusFor("trash"), onOpen = { onOpen(TRASH_ROUTE) })
             }
+            if (state.shizukuShown) {
+                item(key = "shizuku") {
+                    SimpleRow(
+                        icon = R.drawable.ic_settings,
+                        title = stringResource(R.string.shizuku_title),
+                        detail = stringResource(if (state.shizukuReady) R.string.shizuku_row_ready else R.string.shizuku_row_todo),
+                        focusRequester = focusFor("shizuku"),
+                        onClick = {
+                            onOpen(
+                                if (state.shizukuReady) Routes.remote(io.github.thomaszimmer13.xfiles.data.shizuku.ShizukuAccess.SERVER_ID)
+                                else Routes.SHIZUKU,
+                            )
+                        },
+                    )
+                }
+            }
             item(key = "header-servers") {
                 SectionHeader(stringResource(R.string.section_servers))
             }
@@ -163,6 +213,30 @@ fun ExplorerRootScreen(
                     detail = stringResource(R.string.server_add_detail),
                     focusRequester = focusFor("add-server"),
                     onClick = { onOpen(io.github.thomaszimmer13.xfiles.ui.browser.Routes.serverEdit(null)) },
+                )
+            }
+            item(key = "header-vaults") {
+                SectionHeader(stringResource(R.string.section_vaults))
+            }
+            items(state.vaults, key = { "vault:" + it.id }) { vault ->
+                VaultRow(
+                    vault = vault,
+                    open = vault.id in state.openVaults,
+                    cloudName = state.servers.firstOrNull { it.id == vault.username }?.name,
+                    focusRequester = focusFor("vault:" + vault.id),
+                    onOpen = onOpen,
+                    onLock = { viewModel.lockVault(vault) },
+                    onForgetBio = { viewModel.forgetVaultBio(vault) },
+                    onRemove = { removing = vault },
+                )
+            }
+            item(key = "add-vault") {
+                SimpleRow(
+                    icon = R.drawable.ic_lock,
+                    title = stringResource(R.string.vault_new),
+                    detail = stringResource(R.string.vault_new_detail),
+                    focusRequester = focusFor("add-vault"),
+                    onClick = { onOpen(Routes.VAULT_ADD) },
                 )
             }
             if (state.favorites.isNotEmpty()) {
@@ -312,6 +386,8 @@ private fun ServerRow(server: io.github.thomaszimmer13.xfiles.data.remote.Remote
             io.github.thomaszimmer13.xfiles.data.remote.Protocol.WEBDAV -> R.string.protocol_webdav_short
             io.github.thomaszimmer13.xfiles.data.remote.Protocol.CLOUD ->
                 io.github.thomaszimmer13.xfiles.data.remote.CloudProvider.of(server.host)?.label ?: R.string.cloud_add
+            io.github.thomaszimmer13.xfiles.data.remote.Protocol.SHIZUKU -> R.string.shizuku_title
+            io.github.thomaszimmer13.xfiles.data.remote.Protocol.VAULT -> R.string.vault_kind
         },
     )
     val detail = if (server.protocol.cloud) {
@@ -330,6 +406,47 @@ private fun ServerRow(server: io.github.thomaszimmer13.xfiles.data.remote.Remote
             contentDescription = "${server.name}, $detail"
             onClick(label = openLabel) { open(); true }
             customActions = listOf(CustomAccessibilityAction(editLabel) { onOpen(io.github.thomaszimmer13.xfiles.ui.browser.Routes.serverEdit(server.id)); true })
+        },
+    )
+}
+
+/**
+ * Coffre : « Perso, coffre verrouillé, sur le téléphone » ; actions Verrouiller (s'il est ouvert),
+ * Ne plus utiliser l'empreinte, Retirer le coffre.
+ */
+@Composable
+private fun VaultRow(
+    vault: io.github.thomaszimmer13.xfiles.data.remote.RemoteServer,
+    open: Boolean,
+    cloudName: String?,
+    focusRequester: FocusRequester?,
+    onOpen: (String) -> Unit,
+    onLock: () -> Unit,
+    onForgetBio: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    val openLabel = stringResource(R.string.action_open)
+    val lockLabel = stringResource(R.string.vault_lock)
+    val bioLabel = stringResource(R.string.vault_bio_forget)
+    val removeLabel = stringResource(R.string.vault_remove)
+    val status = stringResource(if (open) R.string.vault_open_state else R.string.vault_locked_state)
+    val where = if (cloudName != null) stringResource(R.string.vault_in_cloud, cloudName) else stringResource(R.string.vault_on_phone)
+    val detail = "$status, $where"
+    val go = { onOpen(Routes.remote(vault.id)) }
+    RootRow(
+        icon = R.drawable.ic_lock,
+        title = vault.name,
+        detail = detail,
+        focusRequester = focusRequester,
+        onClick = go,
+        semantics = {
+            contentDescription = "${vault.name}, $detail"
+            onClick(label = openLabel) { go(); true }
+            customActions = buildList {
+                if (open) add(CustomAccessibilityAction(lockLabel) { onLock(); true })
+                if (vault.password.isNotEmpty()) add(CustomAccessibilityAction(bioLabel) { onForgetBio(); true })
+                add(CustomAccessibilityAction(removeLabel) { onRemove(); true })
+            }
         },
     )
 }

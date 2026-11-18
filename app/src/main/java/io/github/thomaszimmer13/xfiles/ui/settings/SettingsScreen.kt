@@ -54,6 +54,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import io.github.thomaszimmer13.xfiles.ui.components.StatusMessage
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
     private val preferences = (application as XFilesApplication).container.preferences
@@ -67,6 +68,17 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val player = preferences.playerSettings.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PreferencesRepository.PlayerSettings())
 
     val builtinDocuments = preferences.builtinDocuments.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    val explorerTabs = preferences.explorerTabs.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val dualPane = preferences.dualPane.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun setExplorerTabs(value: Boolean) {
+        viewModelScope.launch { preferences.setExplorerTabs(value) }
+    }
+
+    fun setDualPane(value: Boolean) {
+        viewModelScope.launch { preferences.setDualPane(value) }
+    }
 
     private val ocr = (application as XFilesApplication).container.ocr
     val ocrState = ocr.state
@@ -122,13 +134,15 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
  * Chaque interrupteur est un seul élément TalkBack : « Afficher les fichiers cachés, désactivé, interrupteur ».
  */
 @Composable
-fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = viewModel()) {
+fun SettingsScreen(onBack: () -> Unit, onOpen: (String) -> Unit = {}, viewModel: SettingsViewModel = viewModel()) {
     val confirmTrash by viewModel.confirmTrash.collectAsStateWithLifecycle()
     val showHidden by viewModel.showHidden.collectAsStateWithLifecycle()
     val announcePosition by viewModel.announcePosition.collectAsStateWithLifecycle()
     val feedbackSounds by viewModel.feedbackSounds.collectAsStateWithLifecycle()
     val player by viewModel.player.collectAsStateWithLifecycle()
     val builtinDocuments by viewModel.builtinDocuments.collectAsStateWithLifecycle()
+    val explorerTabs by viewModel.explorerTabs.collectAsStateWithLifecycle()
+    val dualPane by viewModel.dualPane.collectAsStateWithLifecycle()
     val ocrState by viewModel.ocrState.collectAsStateWithLifecycle()
     var confirmDeleteOcr by remember { mutableStateOf(false) }
     if (confirmDeleteOcr) {
@@ -150,6 +164,10 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = viewModel(
 
     Column(Modifier.fillMaxSize()) {
         XFilesTopBar(title = stringResource(R.string.settings_title), onBack = onBack, titleFocus = titleFocus)
+        val securityScope = androidx.compose.runtime.rememberCoroutineScope()
+        val securityAnnouncer = remember(securityScope) { io.github.thomaszimmer13.xfiles.ui.components.Announcer(securityScope) }
+        val securityMessage by securityAnnouncer.message.collectAsStateWithLifecycle()
+        StatusMessage(securityMessage)
         Column(Modifier.verticalScroll(rememberScrollState())) {
             SectionHeader(stringResource(R.string.settings_section_behavior))
             SwitchRow(
@@ -164,6 +182,22 @@ fun SettingsScreen(onBack: () -> Unit, viewModel: SettingsViewModel = viewModel(
                 checked = showHidden,
                 onChange = viewModel::setShowHidden,
             )
+
+            SectionHeader(stringResource(R.string.settings_section_explorer))
+            SwitchRow(
+                label = stringResource(R.string.settings_explorer_tabs),
+                detail = stringResource(R.string.settings_explorer_tabs_detail),
+                checked = explorerTabs,
+                onChange = viewModel::setExplorerTabs,
+            )
+            SwitchRow(
+                label = stringResource(R.string.settings_dual_pane),
+                detail = stringResource(R.string.settings_dual_pane_detail),
+                checked = dualPane,
+                onChange = viewModel::setDualPane,
+            )
+
+            SecuritySection(onOpen, securityAnnouncer)
 
             SectionHeader(stringResource(R.string.settings_section_accessibility))
             SwitchRow(
@@ -345,7 +379,7 @@ private fun SkipDialog(title: String, choices: List<Int>, current: Int, onPick: 
 }
 
 @Composable
-private fun SwitchRow(label: String, detail: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
+fun SwitchRow(label: String, detail: String?, checked: Boolean, onChange: (Boolean) -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
@@ -366,3 +400,88 @@ private fun SwitchRow(label: String, detail: String?, checked: Boolean, onChange
 }
 
 private const val SOURCE_URL = "https://github.com/THOMASZIMMER13/xfiles"
+
+/**
+ * Sécurité : verrouillage d'XFiles (et délai), confirmation avant les serveurs, accès aux données
+ * des applications par Shizuku. Activer ou désactiver demande l'identité (pas de contournement).
+ */
+@Composable
+private fun SecuritySection(onOpen: (String) -> Unit, announcer: io.github.thomaszimmer13.xfiles.ui.components.Announcer) {
+    val context = LocalContext.current
+    val container = remember(context) { (context.applicationContext as io.github.thomaszimmer13.xfiles.XFilesApplication).container }
+    val lock = container.appLock
+    val enabled by lock.enabled.collectAsStateWithLifecycle()
+    val delay by lock.delay.collectAsStateWithLifecycle()
+    val protect by lock.protectServers.collectAsStateWithLifecycle()
+    val shizukuState by container.shizuku.state.collectAsStateWithLifecycle()
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var delayDialog by remember { mutableStateOf(false) }
+    val confirmTitle = stringResource(R.string.security_confirm_change)
+    val noMethod = stringResource(R.string.security_no_method)
+
+    fun confirmThen(action: () -> Unit) {
+        val Bio = io.github.thomaszimmer13.xfiles.ui.security.Biometrics
+        if (!Bio.available(context, Bio.ANY)) return announcer.announce(noMethod)
+        val activity = Bio.activity(context) ?: return
+        scope.launch { if (Bio.prompt(activity, confirmTitle) != null) action() }
+    }
+
+    val delayLabels = io.github.thomaszimmer13.xfiles.data.security.AppLock.DELAYS.associateWith { seconds ->
+        if (seconds == 0) stringResource(R.string.security_delay_now)
+        else androidx.compose.ui.res.pluralStringResource(R.plurals.security_delay_minutes, seconds / 60, seconds / 60)
+    }
+    fun delayLabel(seconds: Int) = delayLabels[seconds].orEmpty()
+    val lockOn = stringResource(R.string.security_lock_on)
+    val lockOff = stringResource(R.string.security_lock_off)
+
+    SectionHeader(stringResource(R.string.settings_section_security))
+    SwitchRow(
+        label = stringResource(R.string.security_lock),
+        detail = stringResource(R.string.security_lock_detail),
+        checked = enabled,
+        onChange = { value -> confirmThen { lock.setEnabled(value); announcer.announce(if (value) lockOn else lockOff) } },
+    )
+    if (enabled) {
+        ChoiceRow(stringResource(R.string.security_delay), delayLabel(delay)) { delayDialog = true }
+    }
+    SwitchRow(
+        label = stringResource(R.string.security_servers),
+        detail = stringResource(R.string.security_servers_detail),
+        checked = protect,
+        onChange = { value -> confirmThen { lock.setProtectServers(value) } },
+    )
+    val shizukuValue = stringResource(
+        when (shizukuState) {
+            io.github.thomaszimmer13.xfiles.data.shizuku.ShizukuState.READY -> R.string.shizuku_short_ready
+            io.github.thomaszimmer13.xfiles.data.shizuku.ShizukuState.NOT_INSTALLED -> R.string.shizuku_short_not_installed
+            else -> R.string.shizuku_short_todo
+        },
+    )
+    ChoiceRow(stringResource(R.string.shizuku_title), shizukuValue) { onOpen(io.github.thomaszimmer13.xfiles.ui.browser.Routes.SHIZUKU) }
+
+    if (delayDialog) {
+        AlertDialog(
+            onDismissRequest = { delayDialog = false },
+            title = { Text(stringResource(R.string.security_delay), modifier = Modifier.semantics { heading() }) },
+            text = {
+                Column(Modifier.selectableGroup()) {
+                    io.github.thomaszimmer13.xfiles.data.security.AppLock.DELAYS.forEach { seconds ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .selectable(selected = seconds == delay, role = Role.RadioButton, onClick = { lock.setDelay(seconds); delayDialog = false }),
+                        ) {
+                            RadioButton(selected = seconds == delay, onClick = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(delayLabel(seconds))
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = { delayDialog = false }) { Text(stringResource(R.string.action_cancel)) } },
+        )
+    }
+}

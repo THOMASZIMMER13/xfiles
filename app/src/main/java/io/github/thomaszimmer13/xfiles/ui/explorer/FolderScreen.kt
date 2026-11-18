@@ -125,8 +125,14 @@ fun FolderScreen(
     val shortcutUnsupported = stringResource(R.string.shortcut_unsupported)
     val passwordRequest by viewModel.passwordGate.request.collectAsStateWithLifecycle()
 
+    val pane = LocalPaneActions.current
+    val otherDir = pane.otherPane?.dir
     val actions = FileRowActions(
         open = { item -> launcher.open(item.path, item.name, item.isDirectory) },
+        openInNewTab = pane.openInNewTab?.let { openTab -> { item: FileItem -> openTab(item.path) } },
+        copyToOther = otherDir?.let { dir -> { item: FileItem -> withNotifications { viewModel.sendTo(listOf(item), TransferMode.COPY, dir) } } },
+        moveToOther = otherDir?.let { dir -> { item: FileItem -> withNotifications { viewModel.sendTo(listOf(item), TransferMode.MOVE, dir) } } },
+        otherName = pane.otherPane?.name.orEmpty(),
         openWith = { item -> launcher.openWith(item.path, item.name) },
         share = { item -> launcher.share(item.path, item.name) },
         extract = { item -> withNotifications { viewModel.extractHere(item) } },
@@ -295,6 +301,9 @@ fun FolderScreen(
                 enabled = state.selected.isNotEmpty(),
                 onCopy = { viewModel.putSelectionInClipboard(TransferMode.COPY) },
                 onMove = { viewModel.putSelectionInClipboard(TransferMode.MOVE) },
+                otherName = pane.otherPane?.name.takeIf { otherDir != null },
+                onCopyOther = { otherDir?.let { dir -> withNotifications { viewModel.sendSelectionTo(TransferMode.COPY, dir) } } },
+                onMoveOther = { otherDir?.let { dir -> withNotifications { viewModel.sendSelectionTo(TransferMode.MOVE, dir) } } },
                 onCompress = { withNotifications { viewModel.compressSelection() } },
                 onRename = { onOpen(Routes.batchRename(viewModel.prepareBatchRename())) },
                 onShare = {
@@ -451,6 +460,12 @@ fun FolderScreen(
 /** Actions possibles sur une ligne, regroupées pour alléger les paramètres. */
 private class FileRowActions(
     val open: (FileItem) -> Unit,
+    /** Onglets activés : dossier ouvert dans un nouvel onglet. */
+    val openInNewTab: ((FileItem) -> Unit)?,
+    /** Double panneau, l'autre affichant un dossier : copie ou déplacement direct. */
+    val copyToOther: ((FileItem) -> Unit)?,
+    val moveToOther: ((FileItem) -> Unit)?,
+    val otherName: String,
     val openWith: (FileItem) -> Unit,
     val share: (FileItem) -> Unit,
     val rename: (FileItem) -> Unit,
@@ -482,6 +497,9 @@ private fun SelectionBar(
     enabled: Boolean,
     onCopy: () -> Unit,
     onMove: () -> Unit,
+    otherName: String?,
+    onCopyOther: () -> Unit,
+    onMoveOther: () -> Unit,
     onCompress: () -> Unit,
     onRename: () -> Unit,
     onShare: () -> Unit,
@@ -496,6 +514,13 @@ private fun SelectionBar(
             ToolButton(R.drawable.ic_share, stringResource(R.string.action_share), enabled, onShare)
             ToolButton(R.drawable.ic_archive, stringResource(R.string.action_compress), enabled, onCompress)
             ToolButton(R.drawable.ic_delete, stringResource(R.string.action_trash_short), enabled, onTrash)
+        }
+        // Double panneau : envoi direct vers le dossier de l'autre panneau.
+        if (otherName != null) {
+            Row(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)) {
+                ToolButton(R.drawable.ic_copy, stringResource(R.string.action_copy_other_pane, otherName), enabled, onCopyOther)
+                ToolButton(R.drawable.ic_move, stringResource(R.string.action_move_other_pane, otherName), enabled, onMoveOther)
+            }
         }
     }
 }
@@ -621,6 +646,9 @@ private fun FileRow(
     val addPlaylistLabel = stringResource(R.string.player_add_to_playlist)
     val shortcutLabel = stringResource(R.string.action_add_shortcut)
     val checkLabel = stringResource(if (selected) R.string.toggle_unselect else R.string.toggle_select)
+    val newTabLabel = stringResource(R.string.action_open_new_tab)
+    val copyOtherLabel = stringResource(R.string.action_copy_other_pane, actions.otherName)
+    val moveOtherLabel = stringResource(R.string.action_move_other_pane, actions.otherName)
 
     Column {
         Row(
@@ -640,6 +668,7 @@ private fun FileRow(
                     }
                     onClick(label = openLabel) { actions.open(item); true }
                     customActions = buildList {
+                        if (item.isDirectory) actions.openInNewTab?.let { add(CustomAccessibilityAction(newTabLabel) { it(item); true }) }
                         if (!item.isDirectory) {
                             add(CustomAccessibilityAction(openWithLabel) { actions.openWith(item); true })
                             add(CustomAccessibilityAction(shareLabel) { actions.share(item); true })
@@ -647,6 +676,8 @@ private fun FileRow(
                         add(CustomAccessibilityAction(renameLabel) { actions.rename(item); true })
                         add(CustomAccessibilityAction(copyLabel) { actions.copy(item); true })
                         add(CustomAccessibilityAction(moveLabel) { actions.move(item); true })
+                        actions.copyToOther?.let { add(CustomAccessibilityAction(copyOtherLabel) { it(item); true }) }
+                        actions.moveToOther?.let { add(CustomAccessibilityAction(moveOtherLabel) { it(item); true }) }
                         add(CustomAccessibilityAction(duplicateLabel) { actions.duplicate(item); true })
                         if (!item.isDirectory && (OcrService.isImage(item.name) || item.name.endsWith(".pdf", ignoreCase = true))) {
                             add(CustomAccessibilityAction(ocrLabel) { actions.recognizeText(item); true })

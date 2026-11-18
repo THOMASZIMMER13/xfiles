@@ -20,6 +20,9 @@ Logiciel libre (GPL-3.0), sans publicité ni pistage.
 - **Recherche** par nom (sans tenir compte des majuscules ni des accents).
 - **Archives zip** : parcourir, ouvrir, extraire, créer.
 - Opérations longues en **arrière-plan** avec notification et annulation.
+- **Onglets** et **double panneau** (facultatifs), copie directe d'un panneau à l'autre.
+- **Serveurs** (SMB, SFTP, WebDAV, FTP), **comptes en ligne** (Drive, OneDrive, Dropbox…), **coffres chiffrés**.
+- **Verrouillage** par empreinte ou code ; dossiers **Android/data** avec Shizuku (facultatif).
 
 Détail par version : [CHANGELOG.md](CHANGELOG.md).
 
@@ -34,8 +37,7 @@ indispensable à un gestionnaire de fichiers, puis, lors de la première copie l
 
 ## Feuille de route
 
-- Autres formats d'archive : 7z, tar, gz, puis RAR.
-- Dossier `Android/data` via Shizuku.
+- Autres formats d'archive : WIM, RAR5, ISO.
 
 ## Compiler
 
@@ -81,6 +83,14 @@ Drive activée, champ d'application `.../auth/drive`). Celui d'XFiles se règle 
 dépôt `XFILES_GDRIVE_CLIENT_ID` et `XFILES_GDRIVE_CLIENT_SECRET` (`gh variable set …`) ; chacun peut
 aussi saisir le sien à l'ajout du compte. Tant que l'application Google n'est pas validée par Google,
 elle est limitée à 100 comptes et affiche un avertissement à la connexion.
+
+## Sécurité
+
+- **Mots de passe des serveurs** : chiffrés (AES-256-GCM) par une clé du Keystore d'Android, qui ne quitte pas le téléphone.
+- **Comptes en ligne** : XFiles ne voit jamais le mot de passe du compte, seulement un jeton révocable ; la configuration rclone qui le contient est chiffrée.
+- **Coffres** : rclone crypt (contenus et noms) ; le mot de passe n'est enregistré que scellé par l'empreinte, si on le demande.
+- **Aucune sauvegarde** des données de l'app (sauvegarde Google et transfert d'appareil désactivés).
+- **Shizuku** : facultatif ; il ne sert qu'à lire et écrire dans Android/data, obb et media.
 
 ## Licence
 

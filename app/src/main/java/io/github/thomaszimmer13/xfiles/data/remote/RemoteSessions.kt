@@ -16,7 +16,12 @@ import java.util.concurrent.ConcurrentHashMap
  * Connexions ouvertes, une par serveur, utilisées par une opération à la fois.
  * Une connexion tombée est rouverte une fois ; elle est fermée après trois minutes sans servir.
  */
-class RemoteSessions(private val scope: CoroutineScope, private val rclone: Rclone? = null) {
+class RemoteSessions(
+    private val scope: CoroutineScope,
+    private val rclone: Rclone? = null,
+    private val vaultKey: (String) -> String? = { null },
+    private val shizuku: (() -> io.github.thomaszimmer13.xfiles.data.shizuku.IFileService)? = null,
+) {
     private class Slot(val mutex: Mutex = Mutex(), var client: RemoteClient? = null, var key: RemoteServer? = null, var idle: Job? = null)
 
     private val slots = ConcurrentHashMap<String, Slot>()
@@ -62,7 +67,7 @@ class RemoteSessions(private val scope: CoroutineScope, private val rclone: Rclo
         val current = slot.client
         if (current != null && same(slot.key, server) && current.isAlive) return current
         drop(slot)
-        return RemoteClient.connect(server, rclone).also {
+        return RemoteClient.connect(server, rclone, vaultKey, shizuku).also {
             slot.client = it
             slot.key = server
         }

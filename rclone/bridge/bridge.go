@@ -19,6 +19,7 @@ import (
 	// Services proposés dans XFiles (les autres alourdiraient l'application).
 	_ "github.com/rclone/rclone/backend/alias"
 	_ "github.com/rclone/rclone/backend/box"
+	_ "github.com/rclone/rclone/backend/crypt" // coffres chiffrés
 	_ "github.com/rclone/rclone/backend/drive"
 	_ "github.com/rclone/rclone/backend/dropbox"
 	_ "github.com/rclone/rclone/backend/local"

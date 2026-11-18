@@ -38,6 +38,10 @@ import java.io.File
 object Routes {
     const val TRASH = "xfiles:corbeille"
     const val SETTINGS = "xfiles:reglages"
+    /** Guide et état de Shizuku (dossiers Android/data). */
+    const val SHIZUKU = "xfiles:shizuku"
+    /** Création d'un coffre chiffré. */
+    const val VAULT_ADD = "xfiles:coffre-nouveau"
     private const val SEARCH = "xfiles:recherche:"
     private const val ZIP = "xfiles:zip:"
     private const val CATEGORY = "xfiles:categorie:"
@@ -90,6 +94,8 @@ object Routes {
         data class Folder(val path: String) : Route
         data object Trash : Route
         data object Settings : Route
+        data object Shizuku : Route
+        data object VaultAdd : Route
         data class Search(val scope: String?) : Route
         data class Zip(val path: String, val inner: String) : Route
         data class CategoryList(val category: Category) : Route
@@ -106,6 +112,8 @@ object Routes {
     fun parse(route: String): Route = when {
         route == TRASH -> Route.Trash
         route == SETTINGS -> Route.Settings
+        route == SHIZUKU -> Route.Shizuku
+        route == VAULT_ADD -> Route.VaultAdd
         route == STORAGE -> Route.Storage
         route.startsWith(CATEGORY) -> runCatching { Route.CategoryList(Category.valueOf(route.removePrefix(CATEGORY))) }.getOrElse { Route.Folder(route) }
         route.startsWith(CLEANUP) -> runCatching { Route.Cleanup(CleanupKind.valueOf(route.removePrefix(CLEANUP))) }.getOrElse { Route.Folder(route) }
@@ -149,6 +157,12 @@ fun BrowserStack(
     /** Dossier à ouvrir directement (raccourci de l'écran d'accueil), puis [onOpenRequestHandled]. */
     openRequest: String? = null,
     onOpenRequestHandled: () -> Unit = {},
+    /** Route affichée (null = racine), pour le nom de l'onglet et le dossier de l'autre panneau. */
+    onCurrentChange: (String?) -> Unit = {},
+    /** Double panneau : le retour arrière du système ne s'applique qu'au panneau actif. */
+    backEnabled: Boolean = true,
+    /** Appelé à chaque navigation dans cette pile (le panneau devient le panneau actif). */
+    onActive: () -> Unit = {},
     root: @Composable (open: (String) -> Unit, reveal: (String) -> Unit, focusPath: String?) -> Unit,
 ) {
     val stack: SnapshotStateList<String> = rememberSaveable(
@@ -160,6 +174,7 @@ fun BrowserStack(
     val current = stack.lastOrNull()
 
     fun open(route: String) {
+        onActive()
         cameFrom = null
         stack.add(route)
     }
@@ -167,18 +182,21 @@ fun BrowserStack(
     /** Ouvre le dossier qui contient [path], focus sur l'élément. */
     fun reveal(path: String) {
         val parent = File(path).parent ?: return
+        onActive()
         cameFrom = path
         stack.add(parent)
     }
 
     fun goUp() {
         if (stack.isEmpty()) return
+        onActive()
         cameFrom = stack.removeAt(stack.lastIndex)
     }
 
     /** Saut direct vers un dossier parent (fil d'Ariane) ; null = racine de l'onglet. */
     fun jumpTo(target: String?) {
         val from = stack.lastOrNull() ?: return
+        onActive()
         cameFrom = from
         if (target == null) {
             stack.clear()
@@ -190,7 +208,8 @@ fun BrowserStack(
         if (stack.lastOrNull() != target) stack.add(target)
     }
 
-    BackHandler(enabled = current != null) { goUp() }
+    BackHandler(enabled = backEnabled && current != null) { goUp() }
+    LaunchedEffect(current) { onCurrentChange(current) }
 
     // Retour à la racine demandé par la barre d'onglets (signal déjà traité mémorisé pour ignorer
     // la valeur initiale et les recompositions).
@@ -219,7 +238,9 @@ fun BrowserStack(
         when (val route = current?.let(Routes::parse)) {
             null -> root(::open, ::reveal, cameFrom)
             Routes.Route.Trash -> TrashScreen(onBack = ::goUp)
-            Routes.Route.Settings -> SettingsScreen(onBack = ::goUp)
+            Routes.Route.Settings -> SettingsScreen(onBack = ::goUp, onOpen = ::open)
+            Routes.Route.Shizuku -> io.github.thomaszimmer13.xfiles.ui.shizuku.ShizukuScreen(onOpen = ::open, onBack = ::goUp)
+            Routes.Route.VaultAdd -> io.github.thomaszimmer13.xfiles.ui.vault.VaultCreateScreen(onBack = ::goUp)
             Routes.Route.Storage -> StorageScreen(onOpen = ::open, onBack = ::goUp)
             is Routes.Route.CategoryList -> CategoryScreen(route.category, onOpen = ::open, onReveal = ::reveal, onBack = ::goUp)
             is Routes.Route.Cleanup -> CleanupScreen(route.kind, onReveal = ::reveal, onBack = ::goUp)

@@ -38,6 +38,12 @@ data class ExplorerRootUiState(
     val categoryCounts: Map<Category, Int> = emptyMap(),
     /** Serveurs réseau enregistrés. */
     val servers: List<io.github.thomaszimmer13.xfiles.data.remote.RemoteServer> = emptyList(),
+    /** Coffres chiffrés, et ceux qui sont ouverts. */
+    val vaults: List<io.github.thomaszimmer13.xfiles.data.remote.RemoteServer> = emptyList(),
+    val openVaults: Set<String> = emptySet(),
+    /** « Données des applications » (Shizuku) affiché, et son état. */
+    val shizukuShown: Boolean = false,
+    val shizukuReady: Boolean = false,
 )
 
 class ExplorerRootViewModel(application: Application) : AndroidViewModel(application) {
@@ -62,7 +68,19 @@ class ExplorerRootViewModel(application: Application) : AndroidViewModel(applica
         }
         viewModelScope.launch {
             container.servers.load()
-            container.servers.servers.collect { list -> _state.update { it.copy(servers = list) } }
+            container.servers.servers.collect { list ->
+                val (vaults, servers) = list.partition { it.protocol == io.github.thomaszimmer13.xfiles.data.remote.Protocol.VAULT }
+                _state.update { it.copy(servers = servers, vaults = vaults) }
+            }
+        }
+        viewModelScope.launch {
+            container.vaultKeys.open.collect { open -> _state.update { it.copy(openVaults = open.keys) } }
+        }
+        viewModelScope.launch {
+            preferences.shizukuInExplorer.collect { shown -> _state.update { it.copy(shizukuShown = shown) } }
+        }
+        viewModelScope.launch {
+            container.shizuku.state.collect { s -> _state.update { it.copy(shizukuReady = s == io.github.thomaszimmer13.xfiles.data.shizuku.ShizukuState.READY) } }
         }
         viewModelScope.launch {
             preferences.favoriteFolders.collect { paths ->
@@ -74,6 +92,25 @@ class ExplorerRootViewModel(application: Application) : AndroidViewModel(applica
             // Une fois par lancement : suppression des éléments de plus de 30 jours.
             withContext(Dispatchers.IO) { runCatching { trash.purgeExpired() } }
             refreshTrashCount()
+        }
+    }
+
+    fun lockVault(server: io.github.thomaszimmer13.xfiles.data.remote.RemoteServer) {
+        container.vaults.lock(server.id)
+        announcer.announce(getApplication<Application>().getString(io.github.thomaszimmer13.xfiles.R.string.vault_locked_now, server.name))
+    }
+
+    fun forgetVaultBio(server: io.github.thomaszimmer13.xfiles.data.remote.RemoteServer) {
+        viewModelScope.launch {
+            container.vaults.forgetSeal(server)
+            announcer.announce(getApplication<Application>().getString(io.github.thomaszimmer13.xfiles.R.string.vault_bio_off))
+        }
+    }
+
+    fun removeVault(server: io.github.thomaszimmer13.xfiles.data.remote.RemoteServer) {
+        viewModelScope.launch {
+            container.vaults.remove(server)
+            announcer.announce(getApplication<Application>().getString(io.github.thomaszimmer13.xfiles.R.string.vault_removed, server.name))
         }
     }
 

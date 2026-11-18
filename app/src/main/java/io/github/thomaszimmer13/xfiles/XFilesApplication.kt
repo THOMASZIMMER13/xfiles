@@ -26,15 +26,19 @@ class XFilesApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
+        // Copies déchiffrées des coffres laissées par un arrêt de l'application.
+        Thread { runCatching { container.vaults.purgeCache() } }.start()
         registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
-                startedActivities++
+                if (startedActivities++ == 0) container.appLock.onForeground()
                 isInForeground = true
             }
 
             override fun onActivityStopped(activity: Activity) {
                 startedActivities--
                 isInForeground = startedActivities > 0
+                // Rotation : pas une sortie de l'application.
+                if (startedActivities == 0 && !activity.isChangingConfigurations) container.appLock.onBackground()
             }
 
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
@@ -80,7 +84,16 @@ class AppContainer(application: Application) {
 
     /** Comptes en ligne (Google Drive, OneDrive, Dropbox…) par rclone intégré. */
     val rclone = io.github.thomaszimmer13.xfiles.data.remote.Rclone(application)
-    val remote = io.github.thomaszimmer13.xfiles.data.remote.RemoteSessions(remoteScope, rclone)
+    /** Dossiers Android/data et obb par Shizuku. */
+    val shizuku = io.github.thomaszimmer13.xfiles.data.shizuku.ShizukuAccess(application)
+    val vaultKeys = io.github.thomaszimmer13.xfiles.data.vault.VaultKeys()
+    val remote = io.github.thomaszimmer13.xfiles.data.remote.RemoteSessions(remoteScope, rclone, vaultKeys::get, shizuku::files)
+
+    /** Coffres chiffrés (rclone crypt). */
+    val vaults = io.github.thomaszimmer13.xfiles.data.vault.Vaults(application, rclone, servers, remote, vaultKeys)
+
+    /** Verrouillage de l'app ; après une longue absence, les coffres se referment. */
+    val appLock = io.github.thomaszimmer13.xfiles.data.security.AppLock(application) { vaults.lockAll() }
 
     /** Éléments choisis pour le renommage par lot. */
     val pendingRename = io.github.thomaszimmer13.xfiles.ui.rename.PendingRename()

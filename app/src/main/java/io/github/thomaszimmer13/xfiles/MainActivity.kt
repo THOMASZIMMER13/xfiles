@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import android.provider.OpenableColumns
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.core.content.IntentCompat
@@ -22,9 +22,14 @@ import io.github.thomaszimmer13.xfiles.data.incoming.IncomingRequest
 import io.github.thomaszimmer13.xfiles.data.open.Shortcuts
 import io.github.thomaszimmer13.xfiles.player.PlaybackService
 import io.github.thomaszimmer13.xfiles.ui.XFilesApp
+import io.github.thomaszimmer13.xfiles.ui.security.LockScreen
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.thomaszimmer13.xfiles.ui.theme.XFilesTheme
 
-class MainActivity : ComponentActivity() {
+/** FragmentActivity : nécessaire à la fenêtre d'identification d'Android (verrouillage, coffres). */
+class MainActivity : FragmentActivity() {
     /** Vrai si cette fenêtre a reçu un partage ou une demande de fichier : à oublier quand elle se ferme. */
     private var ownsRequest = false
 
@@ -44,9 +49,21 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        val lock = (application as XFilesApplication).container.appLock
+        // Verrouillage actif : pas d'aperçu du contenu dans l'écran des applications récentes.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            lifecycleScope.launch { lock.enabled.collect { setRecentsScreenshotEnabled(!it) } }
+        }
         setContent {
             XFilesTheme {
-                XFilesApp()
+                val locked by lock.locked.collectAsStateWithLifecycle()
+                // L'état de navigation est gardé pendant que l'écran de verrouillage le remplace.
+                val holder = rememberSaveableStateHolder()
+                if (locked) {
+                    LockScreen(onUnlocked = lock::unlocked, onDisable = { lock.setEnabled(false); lock.unlocked() })
+                } else {
+                    holder.SaveableStateProvider("app") { XFilesApp() }
+                }
             }
         }
     }

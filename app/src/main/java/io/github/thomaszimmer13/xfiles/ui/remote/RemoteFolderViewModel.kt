@@ -38,6 +38,11 @@ data class RemoteFolderUiState(
     val hostKey: HostKeyException? = null,
     /** Fichier téléchargé dans le cache, à ouvrir. */
     val opened: File? = null,
+    /** Coffre fermé : mot de passe (ou empreinte) à donner. */
+    val locked: Boolean = false,
+    val unlocking: Boolean = false,
+    /** Coffre tout juste ouvert : sceller son mot de passe par l'empreinte (fenêtre à afficher). */
+    val sealRequest: Boolean = false,
 )
 
 class RemoteFolderViewModel(application: Application) : AndroidViewModel(application) {
@@ -52,6 +57,22 @@ class RemoteFolderViewModel(application: Application) : AndroidViewModel(applica
 
     private fun text(id: Int, vararg args: Any) = getApplication<Application>().getString(id, *args)
 
+    private val vaults = container.vaults
+    private var pendingSeal: String? = null
+
+    init {
+        // Coffre refermé (délai, verrouillage) pendant que l'écran est ouvert.
+        viewModelScope.launch {
+            container.vaultKeys.open.collect { open ->
+                val server = _state.value.server ?: return@collect
+                if (server.protocol == io.github.thomaszimmer13.xfiles.data.remote.Protocol.VAULT && server.id !in open && !_state.value.locked && !_state.value.unlocking) {
+                    transferJob?.cancel()
+                    _state.update { it.copy(locked = true, entries = emptyList(), loading = false, error = null) }
+                }
+            }
+        }
+    }
+
     fun load(serverId: String, path: String) {
         viewModelScope.launch {
             if (store.servers.value.isEmpty()) store.load()
@@ -61,8 +82,87 @@ class RemoteFolderViewModel(application: Application) : AndroidViewModel(applica
                 return@launch
             }
             _state.update { it.copy(server = server, path = path) }
+            if (server.protocol == io.github.thomaszimmer13.xfiles.data.remote.Protocol.VAULT && !vaults.isOpen(server.id)) {
+                _state.update { it.copy(locked = true, loading = false) }
+                return@launch
+            }
             refresh()
         }
+    }
+
+    /** Ouvre le coffre ; [rememberBio] : proposer ensuite l'empreinte pour la prochaine fois. */
+    fun unlock(password: String, rememberBio: Boolean) {
+        val server = _state.value.server ?: return
+        if (password.isEmpty() || _state.value.unlocking) return
+        _state.update { it.copy(unlocking = true) }
+        announcer.announce(text(R.string.vault_unlocking))
+        viewModelScope.launch {
+            try {
+                if (vaults.unlock(server, password)) {
+                    container.feedback.success()
+                    _state.update { it.copy(locked = false, unlocking = false) }
+                    announcer.announce(text(R.string.vault_unlocked, server.name))
+                    if (rememberBio) {
+                        pendingSeal = password
+                        _state.update { it.copy(sealRequest = true) }
+                    }
+                    refresh()
+                } else {
+                    container.feedback.failure()
+                    _state.update { it.copy(unlocking = false) }
+                    announcer.announce(text(R.string.vault_wrong_password))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                container.feedback.failure()
+                _state.update { it.copy(unlocking = false) }
+                announcer.announce(errorText(e))
+            }
+        }
+    }
+
+    /** Empreinte acceptée : le mot de passe scellé est relu, puis le coffre ouvert. */
+    fun unlockWithBio(cipher: javax.crypto.Cipher) {
+        val server = _state.value.server ?: return
+        val password = vaults.openSeal(server, cipher) ?: return announcer.announce(text(R.string.vault_bio_lost))
+        unlock(password, false)
+    }
+
+    /** Empreintes du téléphone changées : le mot de passe scellé est perdu, on l'oublie. */
+    fun bioInvalidated() {
+        val server = _state.value.server ?: return
+        viewModelScope.launch {
+            val updated = vaults.forgetSeal(server)
+            _state.update { it.copy(server = updated) }
+            announcer.announce(text(R.string.vault_bio_lost))
+        }
+    }
+
+    fun sealCipher(): javax.crypto.Cipher? = _state.value.server?.let { runCatching { vaults.sealCipher(it.id) }.getOrNull() }
+
+    fun saveSeal(cipher: javax.crypto.Cipher?) {
+        val server = _state.value.server
+        val password = pendingSeal
+        pendingSeal = null
+        _state.update { it.copy(sealRequest = false) }
+        if (server == null || password == null || cipher == null) return
+        viewModelScope.launch {
+            runCatching { vaults.saveSeal(server, cipher, password) }
+                .onSuccess { updated ->
+                    _state.update { it.copy(server = updated) }
+                    announcer.announce(text(R.string.vault_bio_on))
+                }
+                .onFailure { announcer.announce(text(R.string.vault_bio_failed)) }
+        }
+    }
+
+    fun lockVault() {
+        val server = _state.value.server ?: return
+        transferJob?.cancel()
+        vaults.lock(server.id)
+        _state.update { it.copy(locked = true, entries = emptyList()) }
+        announcer.announce(text(R.string.vault_locked_now, server.name))
     }
 
     fun refresh() {
@@ -148,7 +248,9 @@ class RemoteFolderViewModel(application: Application) : AndroidViewModel(applica
     /** Envoie ici les éléments du presse-papiers d'XFiles (fichiers et dossiers locaux). */
     fun uploadClipboard() {
         val server = _state.value.server ?: return
-        val items = container.clipboard.content.value?.items.orEmpty()
+        val clip = container.clipboard.content.value
+        val items = clip?.items.orEmpty()
+        val moving = clip?.mode == io.github.thomaszimmer13.xfiles.data.transfer.TransferMode.MOVE
         if (items.isEmpty()) {
             announcer.announce(text(R.string.remote_clipboard_empty))
             return
@@ -163,6 +265,8 @@ class RemoteFolderViewModel(application: Application) : AndroidViewModel(applica
                     val name = NameValidator.uniqueName(item.name, existing, keepExtension = !item.isDirectory)
                     existing += name
                     send(c, File(item.path), RemoteClient.child(path, name), onProgress)
+                    // Déplacer : l'original n'est supprimé qu'une fois envoyé (coffre : il ne reste que la copie chiffrée).
+                    if (moving) File(item.path).deleteRecursively()
                 }
             }
             container.clipboard.clear()

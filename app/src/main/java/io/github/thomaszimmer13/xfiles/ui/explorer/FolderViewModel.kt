@@ -252,6 +252,20 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
         announcer.announce(res.getQuantityString(plural, items.size, items.size, items.first().name))
     }
 
+    /** Double panneau : copie ou déplace [items] directement dans le dossier de l'autre panneau. */
+    fun sendTo(items: List<FileItem>, mode: TransferMode, dir: String) {
+        if (items.isEmpty()) return
+        if (dir == _state.value.path) return announcer.announce(getApplication<Application>().getString(R.string.pane_same_folder))
+        if (items.any { it.isDirectory && (dir == it.path || dir.startsWith(it.path + "/")) }) {
+            return announcer.announce(getApplication<Application>().getString(R.string.pane_into_itself))
+        }
+        _state.update { it.copy(selecting = false, selected = emptySet()) }
+        val clip = ClipContent(items.map { ClipItem(it.path, it.name, it.isDirectory) }, mode)
+        startOrBusy { transfers.paste(clip, dir, java.io.File(dir).name, focusResult = false) }
+    }
+
+    fun sendSelectionTo(mode: TransferMode, dir: String) = sendTo(selectedItems(), mode, dir)
+
     /** Pose la sélection (dans l'ordre affiché) pour le renommage par lot et quitte la sélection. */
     fun prepareBatchRename(): Int {
         val items = selectedItems().map { io.github.thomaszimmer13.xfiles.data.rename.RenameSource(it.path, it.name, it.lastModified, it.isDirectory) }

@@ -68,12 +68,25 @@ private fun RemoteEntry.asItem() = FileItem(path, name, isDirectory, size, lastM
  */
 @Composable
 fun RemoteFolderScreen(serverId: String, path: String, onOpen: (String) -> Unit, onBack: () -> Unit, viewModel: RemoteFolderViewModel = viewModel(key = "remote:$serverId:$path")) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val appLock = remember(context) { (context.applicationContext as io.github.thomaszimmer13.xfiles.XFilesApplication).container.appLock }
+    val protect by appLock.protectServers.collectAsStateWithLifecycle()
+    val confirmed by appLock.serversConfirmed.collectAsStateWithLifecycle()
+    // Réglage « Confirmer mon identité » : rien n'est chargé avant (le dossier Android n'est pas concerné).
+    if (protect && !confirmed && serverId != io.github.thomaszimmer13.xfiles.data.shizuku.ShizukuAccess.SERVER_ID) {
+        io.github.thomaszimmer13.xfiles.ui.security.IdentityGate(
+            title = stringResource(R.string.security_servers_gate_title),
+            onConfirmed = appLock::confirmServers,
+            onBack = onBack,
+        )
+        return
+    }
     LaunchedEffect(serverId, path) { if (viewModel.state.value.server == null) viewModel.load(serverId, path) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val announcement by viewModel.announcer.message.collectAsStateWithLifecycle()
     val launcher = rememberFileLauncher(onRoute = onOpen, onProblem = { viewModel.announcer.announce(it) })
     val titleFocus = remember { FocusRequester() }
-    FocusOnceEffect(ready = !state.loading) { titleFocus.requestFocus() }
+    FocusOnceEffect(ready = !state.loading && !state.locked) { titleFocus.requestFocus() }
     var newFolder by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<RemoteEntry?>(null) }
     var deleting by remember { mutableStateOf<RemoteEntry?>(null) }
@@ -89,6 +102,7 @@ fun RemoteFolderScreen(serverId: String, path: String, onOpen: (String) -> Unit,
     val folderName = if (path == "/") server?.name.orEmpty() else RemoteClient.nameOf(path)
     val spokenTitle = when {
         server == null -> folderName
+        state.locked -> stringResource(R.string.vault_title_locked, server.name)
         path == "/" -> stringResource(R.string.remote_title_root, server.name, state.entries.size)
         else -> stringResource(R.string.remote_title, folderName, server.name, state.entries.size)
     }
@@ -99,7 +113,12 @@ fun RemoteFolderScreen(serverId: String, path: String, onOpen: (String) -> Unit,
             onBack = onBack,
             titleFocus = titleFocus,
             actions = {
-                if (server != null) {
+                if (server != null && server.protocol == io.github.thomaszimmer13.xfiles.data.remote.Protocol.VAULT && !state.locked) {
+                    IconButton(onClick = viewModel::lockVault) {
+                        Icon(painterResource(R.drawable.ic_lock), contentDescription = stringResource(R.string.vault_lock))
+                    }
+                }
+                if (server != null && !state.locked) {
                     IconButton(onClick = viewModel::uploadClipboard) {
                         Icon(painterResource(R.drawable.ic_paste), contentDescription = stringResource(R.string.remote_upload_here))
                     }
@@ -128,11 +147,16 @@ fun RemoteFolderScreen(serverId: String, path: String, onOpen: (String) -> Unit,
         }
         StatusMessage(announcement)
         when {
+            state.locked && server != null -> io.github.thomaszimmer13.xfiles.ui.vault.VaultUnlockPanel(server, state.unlocking, viewModel)
             state.loading && state.entries.isEmpty() -> Text(stringResource(R.string.remote_connecting), modifier = Modifier.padding(16.dp))
             state.error != null && state.entries.isEmpty() -> Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(state.error!!, style = MaterialTheme.typography.bodyLarge)
                 Button(onClick = viewModel::refresh) { Text(stringResource(R.string.remote_retry)) }
-                if (server != null) TextButton(onClick = { onOpen(Routes.serverEdit(server.id)) }) { Text(stringResource(R.string.remote_edit_server)) }
+                when (server?.protocol) {
+                    null, io.github.thomaszimmer13.xfiles.data.remote.Protocol.VAULT -> Unit
+                    io.github.thomaszimmer13.xfiles.data.remote.Protocol.SHIZUKU -> TextButton(onClick = { onOpen(Routes.SHIZUKU) }) { Text(stringResource(R.string.shizuku_open_guide)) }
+                    else -> TextButton(onClick = { onOpen(Routes.serverEdit(server.id)) }) { Text(stringResource(R.string.remote_edit_server)) }
+                }
             }
             state.entries.isEmpty() -> Text(stringResource(R.string.folder_empty), modifier = Modifier.padding(16.dp))
             else -> LazyColumn(Modifier.weight(1f)) {

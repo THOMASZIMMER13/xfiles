@@ -19,6 +19,12 @@ enum class Protocol(val defaultPort: Int, val scheme: String, val cloud: Boolean
      * service rclone (« drive »), [RemoteServer.basePath] = nom de sa configuration rclone.
      */
     CLOUD(443, "cloud", cloud = true),
+
+    /** Dossier Android (data, obb) par Shizuku : « serveur » virtuel, jamais enregistré. */
+    SHIZUKU(0, "android"),
+
+    /** Coffre chiffré par rclone « crypt » (voir Vaults). */
+    VAULT(0, "coffre"),
 }
 
 /**
@@ -42,7 +48,7 @@ data class RemoteServer(
     val hostKey: String = "",
 ) {
     val anonymous: Boolean get() = username.isBlank()
-    val displayAddress: String get() = if (protocol.cloud) host else "${protocol.scheme}://$host" + (if (port != protocol.defaultPort) ":$port" else "") + basePath.let { if (it.isEmpty() || it.startsWith("/")) it else "/$it" }
+    val displayAddress: String get() = if (protocol.cloud || protocol == Protocol.VAULT || protocol == Protocol.SHIZUKU) host else "${protocol.scheme}://$host" + (if (port != protocol.defaultPort) ":$port" else "") + basePath.let { if (it.isEmpty() || it.startsWith("/")) it else "/$it" }
 }
 
 /** Élément d'un dossier distant. [path] : chemin absolu sur le serveur, « /Photos/2026/a.jpg ». */
@@ -83,12 +89,22 @@ interface RemoteClient : Closeable {
     val isAlive: Boolean
 
     companion object {
-        fun connect(server: RemoteServer, rclone: Rclone? = null): RemoteClient = when (server.protocol) {
+        fun connect(
+            server: RemoteServer,
+            rclone: Rclone? = null,
+            vaultKey: (String) -> String? = { null },
+            shizuku: (() -> io.github.thomaszimmer13.xfiles.data.shizuku.IFileService)? = null,
+        ): RemoteClient = when (server.protocol) {
             Protocol.SFTP -> SftpRemote(server)
             Protocol.FTP, Protocol.FTPS -> FtpRemote(server)
             Protocol.WEBDAV -> WebDavRemote(server)
             Protocol.SMB -> SmbRemote(server)
             Protocol.CLOUD -> requireNotNull(rclone).let { RcloneRemote(server.basePath, it, it.transferDir) }
+            Protocol.VAULT -> requireNotNull(rclone).let {
+                val key = vaultKey(server.id) ?: throw RemoteException(RemoteException.Reason.AUTH, "coffre verrouillé")
+                RcloneRemote(io.github.thomaszimmer13.xfiles.data.vault.Vaults.remoteOf(server, key), it, it.transferDir)
+            }
+            Protocol.SHIZUKU -> io.github.thomaszimmer13.xfiles.data.shizuku.ShizukuRemote(requireNotNull(shizuku))
         }
 
         /** « /a/b » + « c » → « /a/b/c ». */

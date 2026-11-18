@@ -32,6 +32,10 @@ bouncycastlePkix = "1.85"
 browser = "1.10.0"
 # Tests JVM : vraie implémentation de org.json (celle d'Android n'existe que sur le téléphone).
 orgJson = "20260522"
+# Dossiers Android/data et obb (droits du débogage prêtés par l'app Shizuku).
+shizuku = "13.1.5"
+# Verrouillage de l'app et coffres : empreinte, visage ou code du téléphone.
+biometric = "1.1.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -64,6 +68,9 @@ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhtt
 bcprov = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
 bcpkix = { group = "org.bouncycastle", name = "bcpkix-jdk18on", version.ref = "bouncycastlePkix" }
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
+shizuku-api = { group = "dev.rikka.shizuku", name = "api", version.ref = "shizuku" }
+shizuku-provider = { group = "dev.rikka.shizuku", name = "provider", version.ref = "shizuku" }
+androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 org-json = { group = "org.json", name = "json", version.ref = "orgJson" }
 pdfbox-android = { group = "com.tom-roush", name = "pdfbox-android", version.ref = "pdfbox" }
 commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "commonsCompress" }
