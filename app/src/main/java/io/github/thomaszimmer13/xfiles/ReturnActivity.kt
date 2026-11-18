@@ -5,13 +5,12 @@ import android.content.Intent
 import android.os.Bundle
 
 /**
- * Retour de la page de connexion Dropbox ou OneDrive (« xfiles-auth://dropbox?code=… ») :
- * transmet l'adresse puis revient sur XFiles en fermant l'onglet du navigateur.
+ * Lien « Revenir à XFiles » de la page affichée après la connexion d'un compte en ligne
+ * (« xfiles-auth://retour ») : ramène XFiles au premier plan en fermant l'onglet du navigateur.
  */
-class OAuthRedirectActivity : Activity() {
+class ReturnActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        intent?.data?.let { (application as XFilesApplication).container.cloud.onRedirect(it) }
         startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
         finish()
     }

@@ -69,10 +69,11 @@ Première version publique : un gestionnaire de fichiers pensé d'abord pour Tal
 - Transferts avec avancement et Annuler ; connexion rouverte toute seule après une coupure.
 
 ### Comptes en ligne
-- « Ajouter un compte en ligne » : Google Drive (compte Google du téléphone), Dropbox et OneDrive (page de connexion dans le navigateur, retour automatique dans XFiles).
-- Mêmes actions que pour un serveur : parcourir, ouvrir, télécharger, envoyer, renommer, supprimer (corbeille du service), nouveau dossier.
-- Google Docs, Sheets, Slides et Drawings apparaissent en .docx, .xlsx, .pptx et .pdf, et s'ouvrent dans ces formats.
-- Gros fichiers envoyés en plusieurs morceaux ; jetons d'accès chiffrés par le Keystore d'Android ; « Reconnecter le compte » si l'accès est retiré.
+- « Ajouter un compte en ligne » : Google Drive, OneDrive, Dropbox, Box, pCloud, Yandex Disk, grâce à rclone intégré.
+- Connexion dans le navigateur, puis lien « Revenir à XFiles » sur la page de fin ; « Annuler la connexion » pendant l'attente.
+- Mêmes actions que pour un serveur : parcourir, ouvrir, télécharger, envoyer, renommer, supprimer, nouveau dossier, avec avancement et Annuler.
+- Espace utilisé annoncé après la connexion et le test ; documents Google ouverts en .docx, .xlsx, .pptx.
+- Jetons chiffrés (Keystore d'Android) ; « Retirer le compte » les efface du téléphone.
 
 ### Renommage par lot
 - Depuis la sélection : bouton « Renommer ».

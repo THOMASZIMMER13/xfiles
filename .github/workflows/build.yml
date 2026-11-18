@@ -17,9 +17,9 @@ jobs:
       XFILES_VERSION_CODE: ${{ github.run_number }}
       # Sur un tag v1.2.3 → 1.2.3 ; sinon dev-<sha court>
       XFILES_VERSION_NAME: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('dev-{0}', github.sha) }}
-      # Stockage en ligne : identifiants publics des applications Dropbox et Microsoft (variables du dépôt).
-      XFILES_DROPBOX_KEY: ${{ vars.XFILES_DROPBOX_KEY }}
-      XFILES_ONEDRIVE_ID: ${{ vars.XFILES_ONEDRIVE_ID }}
+      # Google Drive : identifiant d'application « bureau » d'XFiles (variables du dépôt, facultatives).
+      XFILES_GDRIVE_CLIENT_ID: ${{ vars.XFILES_GDRIVE_CLIENT_ID }}
+      XFILES_GDRIVE_CLIENT_SECRET: ${{ vars.XFILES_GDRIVE_CLIENT_SECRET }}
 
     steps:
       - uses: actions/checkout@v5
@@ -28,6 +28,15 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
+
+      # Pont rclone (comptes en ligne) : Go et le NDK Android pour gomobile.
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: rclone/go.mod
+          cache-dependency-path: rclone/go.sum
+
+      - name: NDK Android
+        run: echo "ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
 
       - uses: gradle/actions/setup-gradle@v5
 
@@ -38,6 +47,10 @@ jobs:
           case "$name" in dev-*) name="dev-${GITHUB_SHA::7}";; esac
           echo "XFILES_VERSION_NAME=$name" >> "$GITHUB_ENV"
           echo "Version : $name (code $XFILES_VERSION_CODE)"
+
+      - name: Tests du pont rclone
+        working-directory: rclone
+        run: go test ./...
 
       - name: Tests et APK debug
         run: ./gradlew testDebugUnitTest assembleDebug --stacktrace

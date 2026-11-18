@@ -64,30 +64,23 @@ reprises de la section `## [X.Y.Z]` du CHANGELOG.
 
 **Sauvegardez la clé** : sans elle, les mises à jour ne s'installeront plus par-dessus l'app existante.
 
-## Comptes en ligne : enregistrer l'application
+## Comptes en ligne (rclone)
 
-Google Drive, Dropbox et OneDrive n'acceptent une app qu'une fois enregistrée chez eux. Ces identifiants sont
-publics (pas de secret) ; sans eux, le service est indiqué « non disponible dans cette version ».
+Google Drive, OneDrive, Dropbox, Box, pCloud et Yandex Disk passent par [rclone](https://rclone.org/)
+(licence MIT), intégré à l'application : le module Go du dossier `rclone/` est compilé en bibliothèque
+Android par gomobile (tâche Gradle `buildRclone`, lancée automatiquement). Pré-requis pour compiler :
+Go (version indiquée dans `rclone/go.mod`) et le NDK Android (`sdkmanager "ndk;29.0.14206865"`,
+ou la variable `ANDROID_NDK_HOME`). Le pont s'inspire de rcbridge de [RSAF](https://github.com/chenxiaolong/RSAF) (GPL-3.0).
 
-**Dropbox** (<https://www.dropbox.com/developers/apps>) : « Create app », accès « Full Dropbox ».
-Onglet *Permissions* : cocher `files.metadata.read`, `files.content.read`, `files.content.write`,
-`account_info.read`. Onglet *Settings*, « Redirect URIs » : ajouter `xfiles-auth://dropbox` (et
-`xfiles-auth-debug://dropbox` pour l'APK debug). Copier l'« App key » dans la variable du dépôt `XFILES_DROPBOX_KEY`.
+La connexion se fait dans le navigateur ; les jetons sont gardés dans la configuration rclone,
+chiffrée par un mot de passe lui-même chiffré par le Keystore d'Android.
 
-**OneDrive** (<https://entra.microsoft.com>, *Inscriptions d'applications*) : « Nouvelle inscription », types de
-comptes « comptes dans un annuaire organisationnel et comptes Microsoft personnels ». Plateforme « Applications
-mobiles et de bureau », URI de redirection `xfiles-auth://onedrive` (et `xfiles-auth-debug://onedrive`).
-Autorisations Microsoft Graph déléguées : `Files.ReadWrite`, `User.Read`, `offline_access`. Copier l'« ID
-d'application (client) » dans la variable `XFILES_ONEDRIVE_ID`.
-
-**Google Drive** (<https://console.cloud.google.com>) : créer un projet, activer « Google Drive API ».
-Écran de consentement OAuth : type « Externe », ajouter le champ d'application `.../auth/drive`, puis
-« Publier l'application » (sinon l'accès expire au bout de 7 jours). Identifiants : « ID client OAuth »
-de type **Android**, nom de package `io.github.thomaszimmer13.xfiles`, empreinte SHA-1 du certificat de signature
-(`keytool -printcert -jarfile xfiles.apk`). Rien à copier dans le dépôt : Google reconnaît l'app à sa signature.
-Pour l'APK debug, un second ID client avec le package `io.github.thomaszimmer13.xfiles.debug` et la clé debug.
-
-Les variables se règlent avec `gh variable set XFILES_DROPBOX_KEY -b <clé>` (de même pour `XFILES_ONEDRIVE_ID`).
+**Google Drive** : l'identifiant partagé de rclone est retiré par Google en 2026, il faut donc un
+identifiant d'application Google de type « Application de bureau » (console Google Cloud, API Google
+Drive activée, champ d'application `.../auth/drive`). Celui d'XFiles se règle par les variables du
+dépôt `XFILES_GDRIVE_CLIENT_ID` et `XFILES_GDRIVE_CLIENT_SECRET` (`gh variable set …`) ; chacun peut
+aussi saisir le sien à l'ajout du compte. Tant que l'application Google n'est pas validée par Google,
+elle est limitée à 100 comptes et affiche un avertissement à la connexion.
 
 ## Licence
 

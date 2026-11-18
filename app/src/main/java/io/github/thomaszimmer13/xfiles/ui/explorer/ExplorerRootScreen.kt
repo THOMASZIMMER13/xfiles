@@ -310,13 +310,12 @@ private fun ServerRow(server: io.github.thomaszimmer13.xfiles.data.remote.Remote
             io.github.thomaszimmer13.xfiles.data.remote.Protocol.FTP -> R.string.protocol_ftp_short
             io.github.thomaszimmer13.xfiles.data.remote.Protocol.FTPS -> R.string.protocol_ftps_short
             io.github.thomaszimmer13.xfiles.data.remote.Protocol.WEBDAV -> R.string.protocol_webdav_short
-            io.github.thomaszimmer13.xfiles.data.remote.Protocol.GDRIVE -> R.string.protocol_gdrive
-            io.github.thomaszimmer13.xfiles.data.remote.Protocol.DROPBOX -> R.string.protocol_dropbox
-            io.github.thomaszimmer13.xfiles.data.remote.Protocol.ONEDRIVE -> R.string.protocol_onedrive
+            io.github.thomaszimmer13.xfiles.data.remote.Protocol.CLOUD ->
+                io.github.thomaszimmer13.xfiles.data.remote.CloudProvider.of(server.host)?.label ?: R.string.cloud_add
         },
     )
     val detail = if (server.protocol.cloud) {
-        if (server.name == protocol) server.username else "$protocol, ${server.username}"
+        if (server.name == protocol) stringResource(R.string.cloud_kind) else protocol
     } else {
         "$protocol, ${server.host}" + server.basePath.takeIf { it.isNotEmpty() }?.let { " " + it.trim('/') }.orEmpty()
     }

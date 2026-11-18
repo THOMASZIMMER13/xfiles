@@ -20,10 +20,10 @@ android {
         versionName = System.getenv("XFILES_VERSION_NAME") ?: "1.0.0-dev"
         // Décodeur FFmpeg : seulement les processeurs des téléphones (ARM). Sur un émulateur x86,
         // le lecteur fonctionne sans FFmpeg.
-        // Stockage en ligne : identifiants publics des applications Dropbox et Microsoft (pas des
-        // secrets), fournis par la CI. Vides : le service est indiqué comme non disponible.
-        buildConfigField("String", "DROPBOX_APP_KEY", "\"${System.getenv("XFILES_DROPBOX_KEY").orEmpty()}\"")
-        buildConfigField("String", "ONEDRIVE_CLIENT_ID", "\"${System.getenv("XFILES_ONEDRIVE_ID").orEmpty()}\"")
+        // Google Drive : identifiant d'application « bureau » d'XFiles (variables du dépôt). Vide :
+        // chaque utilisateur saisit le sien.
+        buildConfigField("String", "GDRIVE_CLIENT_ID", "\"${System.getenv("XFILES_GDRIVE_CLIENT_ID").orEmpty()}\"")
+        buildConfigField("String", "GDRIVE_CLIENT_SECRET", "\"${System.getenv("XFILES_GDRIVE_CLIENT_SECRET").orEmpty()}\"")
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
@@ -92,7 +92,22 @@ android {
     }
 }
 
+// Pont rclone (Google Drive, OneDrive, Dropbox…) : module Go du dossier « rclone », compilé en
+// .aar par gomobile. Pré-requis : Go et le NDK Android.
+val rcloneAar = layout.buildDirectory.file("rclone/rclone.aar")
+val buildRclone = tasks.register<Exec>("buildRclone") {
+    val src = rootProject.file("rclone")
+    inputs.files(fileTree(src) { include("**/*.go", "go.mod", "go.sum", "build.sh") })
+    outputs.file(rcloneAar)
+    workingDir = src
+    executable("bash")
+    val sdk = androidComponents.sdkComponents.sdkDirectory
+    argumentProviders.add(CommandLineArgumentProvider { listOf("build.sh", rcloneAar.get().asFile.absolutePath, sdk.get().asFile.absolutePath) })
+}
+tasks.named("preBuild") { dependsOn(buildRclone) }
+
 dependencies {
+    implementation(files(rcloneAar).builtBy(buildRclone))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
@@ -133,8 +148,7 @@ dependencies {
     implementation(libs.commons.net)
     implementation(libs.okhttp)
 
-    // Stockage en ligne : Google Drive, Dropbox, OneDrive (API web, connexion OAuth).
-    implementation(libs.play.services.auth)
+    // Comptes en ligne : page de connexion dans un onglet du navigateur.
     implementation(libs.androidx.browser)
 
     // Reconnaissance de texte : ONNX Runtime (MIT) fait tourner les modèles PaddleOCR (Apache 2.0).
@@ -146,7 +160,6 @@ dependencies {
     implementation(libs.camera.view)
 
     testImplementation(libs.junit)
-    testImplementation(libs.mockwebserver)
     testImplementation(libs.org.json)
     // Tests du moteur de reconnaissance sur la JVM : même API, bibliothèque native pour PC.
     testImplementation(libs.onnxruntime.jvm)

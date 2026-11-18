@@ -16,7 +16,7 @@ import java.util.concurrent.ConcurrentHashMap
  * Connexions ouvertes, une par serveur, utilisées par une opération à la fois.
  * Une connexion tombée est rouverte une fois ; elle est fermée après trois minutes sans servir.
  */
-class RemoteSessions(private val scope: CoroutineScope, private val cloud: CloudAuth? = null) {
+class RemoteSessions(private val scope: CoroutineScope, private val rclone: Rclone? = null) {
     private class Slot(val mutex: Mutex = Mutex(), var client: RemoteClient? = null, var key: RemoteServer? = null, var idle: Job? = null)
 
     private val slots = ConcurrentHashMap<String, Slot>()
@@ -62,14 +62,13 @@ class RemoteSessions(private val scope: CoroutineScope, private val cloud: Cloud
         val current = slot.client
         if (current != null && same(slot.key, server) && current.isAlive) return current
         drop(slot)
-        return RemoteClient.connect(server, cloud).also {
+        return RemoteClient.connect(server, rclone).also {
             slot.client = it
             slot.key = server
         }
     }
 
-    /** Compte en ligne : un jeton de renouvellement changé ne demande pas de nouvelle connexion. */
-    private fun same(a: RemoteServer?, b: RemoteServer) = a != null && (if (b.protocol.cloud) a.copy(password = "") == b.copy(password = "") else a == b)
+    private fun same(a: RemoteServer?, b: RemoteServer) = a == b
 
     private fun drop(slot: Slot) {
         runCatching { slot.client?.close() }
@@ -79,7 +78,6 @@ class RemoteSessions(private val scope: CoroutineScope, private val cloud: Cloud
 
     /** Serveur modifié ou supprimé : sa connexion est fermée. */
     fun forget(id: String) {
-        cloud?.forget(id)
         slots.remove(id)?.let { slot -> scope.launch { slot.mutex.withLock { drop(slot) } } }
     }
 

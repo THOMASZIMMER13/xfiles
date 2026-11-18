@@ -13,7 +13,6 @@ import io.github.thomaszimmer13.xfiles.data.transfer.LocalTransfer
 import io.github.thomaszimmer13.xfiles.data.transfer.TransferManager
 import io.github.thomaszimmer13.xfiles.data.trash.LocalTrash
 import io.github.thomaszimmer13.xfiles.data.volumes.VolumeRepository
-import kotlinx.coroutines.launch
 
 class XFilesApplication : Application() {
     lateinit var container: AppContainer
@@ -79,15 +78,9 @@ class AppContainer(application: Application) {
     val servers = io.github.thomaszimmer13.xfiles.data.remote.ServerStore(application)
     private val remoteScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO)
 
-    /** Stockage en ligne (Google Drive, Dropbox, OneDrive) : connexion et jetons. */
-    val cloud = io.github.thomaszimmer13.xfiles.data.remote.CloudAuth(
-        application,
-        io.github.thomaszimmer13.xfiles.data.remote.CloudOAuth(BuildConfig.DROPBOX_APP_KEY, BuildConfig.ONEDRIVE_CLIENT_ID, BuildConfig.OAUTH_SCHEME),
-    ) { id, token ->
-        // Jeton de renouvellement remplacé par le service : on garde le nouveau.
-        remoteScope.launch { servers.get(id)?.let { servers.save(it.copy(password = token)) } }
-    }
-    val remote = io.github.thomaszimmer13.xfiles.data.remote.RemoteSessions(remoteScope, cloud)
+    /** Comptes en ligne (Google Drive, OneDrive, Dropbox…) par rclone intégré. */
+    val rclone = io.github.thomaszimmer13.xfiles.data.remote.Rclone(application)
+    val remote = io.github.thomaszimmer13.xfiles.data.remote.RemoteSessions(remoteScope, rclone)
 
     /** Éléments choisis pour le renommage par lot. */
     val pendingRename = io.github.thomaszimmer13.xfiles.ui.rename.PendingRename()

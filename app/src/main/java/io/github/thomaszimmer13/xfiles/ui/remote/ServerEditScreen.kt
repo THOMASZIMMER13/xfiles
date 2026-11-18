@@ -1,14 +1,8 @@
 package io.github.thomaszimmer13.xfiles.ui.remote
 
-import android.app.Activity
 import android.app.Application
-import android.app.PendingIntent
 import android.content.ActivityNotFoundException
-import android.content.Intent
 import android.net.Uri
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.IntentSenderRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -57,8 +51,10 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.thomaszimmer13.xfiles.R
 import io.github.thomaszimmer13.xfiles.XFilesApplication
-import io.github.thomaszimmer13.xfiles.data.remote.CloudAccount
-import io.github.thomaszimmer13.xfiles.data.remote.CloudAuth
+import io.github.thomaszimmer13.xfiles.data.remote.CloudProvider
+import io.github.thomaszimmer13.xfiles.data.remote.CloudSetup
+import io.github.thomaszimmer13.xfiles.data.remote.RcloneException
+import io.github.thomaszimmer13.xfiles.data.remote.RcloneRemote
 import io.github.thomaszimmer13.xfiles.data.remote.HostKeyException
 import io.github.thomaszimmer13.xfiles.data.remote.Protocol
 import io.github.thomaszimmer13.xfiles.data.remote.RemoteServer
@@ -70,7 +66,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -81,13 +76,14 @@ data class ServerEditUiState(
     val testing: Boolean = false,
     val hostKey: HostKeyException? = null,
     val saved: Boolean = false,
-    /** Compte en ligne (Google Drive, Dropbox, OneDrive) plutôt que serveur. */
+    /** Compte en ligne (Google Drive, OneDrive, Dropbox…) plutôt que serveur. */
     val cloud: Boolean = false,
+    /** Connexion en cours : la page du service est ouverte dans le navigateur. */
     val connecting: Boolean = false,
-    /** Page de connexion à ouvrir dans le navigateur (Dropbox, OneDrive). */
+    /** Page de connexion à ouvrir dans le navigateur. */
     val browserUrl: String? = null,
-    /** Écran Google (choix du compte, accord) à afficher. */
-    val googleIntent: PendingIntent? = null,
+    /** Espace utilisé et total du compte, après la connexion ou le test. */
+    val quota: String? = null,
 )
 
 class ServerEditViewModel(application: Application) : AndroidViewModel(application) {
@@ -97,20 +93,13 @@ class ServerEditViewModel(application: Application) : AndroidViewModel(applicati
     val announcer = Announcer(viewModelScope)
     private var loaded = false
 
-    private var awaitingBrowser = false
-
-    init {
-        // Retour du navigateur après la connexion Dropbox ou OneDrive.
-        viewModelScope.launch {
-            container.cloud.redirect.filterNotNull().collect { uri -> if (awaitingBrowser) completeBrowserLogin(uri) }
-        }
-    }
+    private var connectJob: kotlinx.coroutines.Job? = null
 
     fun load(id: String?, cloud: Boolean) {
         if (loaded) return
         loaded = true
         if (id == null) {
-            if (cloud) _state.update { it.copy(cloud = true, server = it.server.copy(protocol = Protocol.GDRIVE, port = Protocol.GDRIVE.defaultPort)) }
+            if (cloud) _state.update { it.copy(cloud = true, server = it.server.copy(protocol = Protocol.CLOUD, port = Protocol.CLOUD.defaultPort, host = CloudProvider.GOOGLE_DRIVE.type)) }
             return
         }
         viewModelScope.launch {
@@ -119,100 +108,115 @@ class ServerEditViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    fun available(p: Protocol) = container.cloud.oauth.available(p)
+    /** Service du compte en ligne (avant la première connexion). */
+    fun setProvider(p: CloudProvider) = _state.update { it.copy(server = it.server.copy(host = p.type)) }
 
-    /** Ouvre la connexion au service choisi : écran Google, ou page web Dropbox / OneDrive. */
+    /**
+     * Connexion du compte : rclone crée sa configuration et attend l'accord donné dans le navigateur.
+     * L'adresse de la page est lue dès qu'elle existe, puis ouverte dans un onglet.
+     */
     fun connect() {
-        val p = _state.value.server.protocol
-        if (!p.cloud) return
-        if (!available(p)) return announcer.announce(text(R.string.cloud_unavailable, text(cloudLabel(p))))
         if (_state.value.connecting) return
-        _state.update { it.copy(connecting = true) }
-        if (p != Protocol.GDRIVE) {
-            awaitingBrowser = true
-            announcer.announce(text(R.string.cloud_browser_opened))
-            _state.update { it.copy(browserUrl = container.cloud.beginLogin(p), connecting = false) }
-            return
-        }
-        viewModelScope.launch {
-            try {
-                when (val step = container.cloud.googleAuthorize(null)) {
-                    is CloudAuth.GoogleStep.Token -> finishGoogle(step.access)
-                    is CloudAuth.GoogleStep.NeedsUser -> _state.update { it.copy(googleIntent = step.intent) }
+        val s = _state.value.server
+        val provider = CloudProvider.of(s.host) ?: return
+        val label = text(provider.label)
+        val remote = CloudProvider.remoteName(s.id)
+        _state.update { it.copy(connecting = true, quota = null) }
+        announcer.announce(text(R.string.cloud_browser_opened, label))
+        connectJob = viewModelScope.launch {
+            val rclone = container.rclone
+            val watcher = launch(kotlinx.coroutines.Dispatchers.IO) {
+                // Page de connexion : connue quand le petit serveur local de rclone est prêt.
+                while (true) {
+                    val url = runCatching { rclone.call("config/oauthstatus", org.json.JSONObject()) }.getOrNull()?.optString("authUrl").orEmpty()
+                    if (url.isNotEmpty()) {
+                        _state.update { it.copy(browserUrl = url) }
+                        break
+                    }
+                    kotlinx.coroutines.delay(300)
                 }
+            }
+            try {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    // Une éventuelle connexion restée en attente est arrêtée d'abord.
+                    runCatching { rclone.call("config/oauthstop", org.json.JSONObject()) }
+                    val parameters = org.json.JSONObject().put("config_template", doneTemplate())
+                    if (provider == CloudProvider.GOOGLE_DRIVE) {
+                        val (id, secret) = googleClient(s)
+                        if (id.isEmpty()) throw RcloneException(400, "client_id required")
+                        parameters.put("client_id", id).put("client_secret", secret)
+                    }
+                    CloudSetup.configure(rclone, remote, provider.type, parameters)
+                }
+                watcher.cancel()
+                val server = normalized().copy(protocol = Protocol.CLOUD, host = provider.type, basePath = remote)
+                container.remote.forget(server.id)
+                container.servers.save(server)
+                container.feedback.success()
+                _state.update { it.copy(server = server, isNew = false, connecting = false, browserUrl = null) }
+                announcer.announce(text(R.string.cloud_connected, label))
+                quota(server)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                loginFailed(e)
-            } finally {
-                _state.update { it.copy(connecting = false) }
+                watcher.cancel()
+                _state.update { it.copy(connecting = false, browserUrl = null) }
+                container.feedback.failure()
+                val message = if ((e as? RcloneException)?.message == "client_id required") {
+                    text(R.string.cloud_google_client_needed)
+                } else {
+                    remoteErrorText(getApplication(), (e as? RcloneException)?.let { RcloneRemote.translate(it, "") } ?: e, cloud = true)
+                }
+                announcer.announce(text(R.string.cloud_login_failed, message))
             }
         }
+    }
+
+    /** Identifiant d'application Google : celui saisi, sinon celui d'XFiles (fourni à la compilation). */
+    private fun googleClient(s: RemoteServer): Pair<String, String> =
+        if (s.username.isNotBlank()) s.username.trim() to s.password.trim()
+        else io.github.thomaszimmer13.xfiles.BuildConfig.GDRIVE_CLIENT_ID to io.github.thomaszimmer13.xfiles.BuildConfig.GDRIVE_CLIENT_SECRET
+
+    /** Arrête la connexion en attente (page fermée sans donner l'accord). */
+    fun cancelConnect() {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) { runCatching { container.rclone.call("config/oauthstop", org.json.JSONObject()) } }
+        announcer.announce(text(R.string.cloud_login_cancelled))
     }
 
     fun browserOpened() = _state.update { it.copy(browserUrl = null) }
 
     fun browserMissing() {
-        awaitingBrowser = false
+        cancelConnect()
         announcer.announce(text(R.string.cloud_no_browser))
     }
 
-    fun googleIntentShown() = _state.update { it.copy(googleIntent = null) }
-
-    fun googleResult(resultCode: Int, data: Intent?) {
-        if (resultCode != Activity.RESULT_OK) return announcer.announce(text(R.string.cloud_login_cancelled))
-        viewModelScope.launch {
-            _state.update { it.copy(connecting = true) }
-            try {
-                finishGoogle(container.cloud.googleResult(data))
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                loginFailed(e)
-            } finally {
-                _state.update { it.copy(connecting = false) }
-            }
+    /** « Utilisé 3,2 Go sur 15 Go », si le service le donne. */
+    private suspend fun quota(server: RemoteServer) {
+        val about = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { container.rclone.call("operations/about", org.json.JSONObject().put("fs", server.basePath + ":")) }.getOrNull()
+        } ?: return
+        val used = about.optLong("used", -1)
+        val total = about.optLong("total", -1)
+        if (used < 0) return
+        val app = getApplication<Application>()
+        val text = if (total > 0) {
+            app.getString(R.string.cloud_quota, android.text.format.Formatter.formatShortFileSize(app, used), android.text.format.Formatter.formatShortFileSize(app, total))
+        } else {
+            app.getString(R.string.cloud_quota_used, android.text.format.Formatter.formatShortFileSize(app, used))
         }
+        _state.update { it.copy(quota = text) }
     }
 
-    private suspend fun finishGoogle(access: String) {
-        val account = container.cloud.account(Protocol.GDRIVE, access)
-        applyLogin(Protocol.GDRIVE, account, refresh = "", access = access, expiresIn = 3000)
-    }
-
-    private suspend fun completeBrowserLogin(uri: Uri) {
-        awaitingBrowser = false
-        _state.update { it.copy(connecting = true) }
-        announcer.announce(text(R.string.cloud_finishing))
-        try {
-            val login = container.cloud.completeLogin(uri)
-            applyLogin(login.protocol, login.account, login.tokens.refresh.orEmpty(), login.tokens.access, login.tokens.expiresInSeconds)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            loginFailed(e)
-        } finally {
-            _state.update { it.copy(connecting = false) }
-        }
-    }
-
-    /** Compte connecté : enregistré tout de suite (le jeton ne doit pas être perdu). */
-    private suspend fun applyLogin(p: Protocol, account: CloudAccount, refresh: String, access: String, expiresIn: Long) {
-        if (account.email.isEmpty()) throw IllegalStateException("compte sans adresse")
-        val label = text(cloudLabel(p))
-        val old = _state.value.server
-        val server = old.copy(protocol = p, port = p.defaultPort, host = "", basePath = "", username = account.email, password = refresh, name = old.name.trim().ifEmpty { label })
-        container.remote.forget(server.id)
-        container.cloud.remember(server.id, access, expiresIn)
-        container.servers.save(server)
-        container.feedback.success()
-        _state.update { it.copy(server = server, isNew = false) }
-        announcer.announce(text(R.string.cloud_connected, label, account.email))
-    }
-
-    private fun loginFailed(e: Exception) {
-        container.feedback.failure()
-        announcer.announce(text(R.string.cloud_login_failed, remoteErrorText(getApplication(), e, cloud = true)))
+    /** Page affichée par le navigateur à la fin de la connexion, avec un lien pour revenir. */
+    private fun doneTemplate(): String {
+        val ok = text(R.string.cloud_page_ok)
+        val failed = text(R.string.cloud_page_failed)
+        val back = text(R.string.cloud_page_back)
+        val link = io.github.thomaszimmer13.xfiles.BuildConfig.OAUTH_SCHEME + "://retour"
+        return """<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">""" +
+            """<title>{{ if .OK }}$ok{{ else }}$failed{{ end }}</title></head><body style="font-family:sans-serif;font-size:1.3em;padding:1em">""" +
+            """<h1>{{ if .OK }}$ok{{ else }}$failed{{ end }}</h1>{{ if eq .OK false }}<p>{{ .Name }} {{ .Description }}</p>{{ end }}""" +
+            """<p><a href="$link" style="font-size:1.4em">$back</a></p></body></html>"""
     }
 
     fun update(server: RemoteServer) = _state.update { it.copy(server = server) }
@@ -225,13 +229,13 @@ class ServerEditViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun normalized(): RemoteServer {
         val s = _state.value.server
-        if (s.protocol.cloud) return s.copy(name = s.name.trim().ifEmpty { text(cloudLabel(s.protocol)) })
+        if (s.protocol.cloud) return s.copy(name = s.name.trim().ifEmpty { CloudProvider.of(s.host)?.let { text(it.label) }.orEmpty() })
         return s.copy(name = s.name.trim().ifEmpty { s.host.trim() }, host = s.host.trim().removePrefix("${s.protocol.scheme}://").trimEnd('/'), basePath = s.basePath.trim(), username = s.username.trim())
     }
 
     fun test() {
         val server = normalized()
-        if (server.protocol.cloud && server.username.isEmpty()) return announcer.announce(text(R.string.cloud_not_connected))
+        if (server.protocol.cloud && server.basePath.isEmpty()) return announcer.announce(text(R.string.cloud_not_connected))
         if (!server.protocol.cloud && server.host.isEmpty()) return announcer.announce(text(R.string.server_host_missing))
         _state.update { it.copy(testing = true) }
         announcer.announce(text(R.string.server_testing))
@@ -241,6 +245,7 @@ class ServerEditViewModel(application: Application) : AndroidViewModel(applicati
                 val count = container.remote.use(server) { it.list("/").size }
                 container.feedback.success()
                 announcer.announce(getApplication<Application>().resources.getQuantityString(R.plurals.server_test_ok, count, count))
+                if (server.protocol.cloud) quota(server)
             } catch (e: HostKeyException) {
                 _state.update { it.copy(hostKey = e) }
             } catch (e: CancellationException) {
@@ -264,7 +269,7 @@ class ServerEditViewModel(application: Application) : AndroidViewModel(applicati
 
     fun save() {
         val server = normalized()
-        if (server.protocol.cloud && server.username.isEmpty()) return announcer.announce(text(R.string.cloud_not_connected))
+        if (server.protocol.cloud && server.basePath.isEmpty()) return announcer.announce(text(R.string.cloud_not_connected))
         if (!server.protocol.cloud && server.host.isEmpty()) return announcer.announce(text(R.string.server_host_missing))
         if (server.protocol == Protocol.SMB && server.basePath.isEmpty()) return announcer.announce(text(R.string.server_share_missing))
         viewModelScope.launch {
@@ -276,8 +281,15 @@ class ServerEditViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun delete() {
-        val id = _state.value.server.id
+        val server = _state.value.server
+        val id = server.id
         viewModelScope.launch {
+            if (server.protocol.cloud && server.basePath.isNotEmpty()) {
+                // Jetons du compte effacés de la configuration rclone.
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    runCatching { container.rclone.call("config/delete", org.json.JSONObject().put("name", server.basePath)) }
+                }
+            }
             container.servers.delete(id)
             container.remote.forget(id)
             _state.update { it.copy(saved = true) }
@@ -300,13 +312,6 @@ fun ServerEditScreen(serverId: String?, cloud: Boolean = false, onBack: () -> Un
     LaunchedEffect(state.saved) { if (state.saved) onBack() }
 
     val context = LocalContext.current
-    val googleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r -> viewModel.googleResult(r.resultCode, r.data) }
-    LaunchedEffect(state.googleIntent) {
-        state.googleIntent?.let {
-            viewModel.googleIntentShown()
-            googleLauncher.launch(IntentSenderRequest.Builder(it.intentSender).build())
-        }
-    }
     LaunchedEffect(state.browserUrl) {
         state.browserUrl?.let { url ->
             viewModel.browserOpened()
@@ -408,48 +413,52 @@ fun ServerEditScreen(serverId: String?, cloud: Boolean = false, onBack: () -> Un
     }
 }
 
-/** Nom affiché d'un service en ligne. */
-fun cloudLabel(p: Protocol): Int = when (p) {
-    Protocol.GDRIVE -> R.string.protocol_gdrive
-    Protocol.DROPBOX -> R.string.protocol_dropbox
-    Protocol.ONEDRIVE -> R.string.protocol_onedrive
-    else -> R.string.protocol_webdav
-}
-
-/** Compte en ligne : service (à l'ajout), compte connecté, « Se connecter », nom, test. */
+/** Compte en ligne : service (à l'ajout), état, « Se connecter », nom, espace utilisé, test. */
 @Composable
 private fun androidx.compose.foundation.layout.ColumnScope.CloudFields(state: ServerEditUiState, viewModel: ServerEditViewModel, onDelete: () -> Unit) {
     val s = state.server
-    val label = stringResource(cloudLabel(s.protocol))
-    val connected = s.username.isNotEmpty()
+    val provider = CloudProvider.of(s.host) ?: CloudProvider.GOOGLE_DRIVE
+    val label = stringResource(provider.label)
+    val connected = s.basePath.isNotEmpty()
     Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
-        if (state.isNew) {
+        if (!connected) {
             Text(stringResource(R.string.cloud_service), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 16.dp, top = 8.dp).semantics { heading() })
             Column(Modifier.selectableGroup()) {
-                listOf(Protocol.GDRIVE, Protocol.DROPBOX, Protocol.ONEDRIVE).forEach { p ->
-                    val name = stringResource(cloudLabel(p))
-                    val text = if (viewModel.available(p)) name else stringResource(R.string.cloud_option_unavailable, name)
+                CloudProvider.entries.forEach { p ->
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(selected = s.protocol == p, role = Role.RadioButton) { viewModel.setProtocol(p) }.padding(horizontal = 16.dp),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            .selectable(selected = provider == p, enabled = !state.connecting, role = Role.RadioButton) { viewModel.setProvider(p) }
+                            .padding(horizontal = 16.dp),
                     ) {
-                        RadioButton(selected = s.protocol == p, onClick = null)
+                        RadioButton(selected = provider == p, onClick = null)
                         Spacer(Modifier.width(12.dp))
-                        Text(text, style = MaterialTheme.typography.bodyLarge)
+                        Text(stringResource(p.label), style = MaterialTheme.typography.bodyLarge)
                     }
                 }
             }
         }
         Text(
-            if (connected) stringResource(R.string.cloud_account_connected, label, s.username) else stringResource(R.string.cloud_account_none, label),
+            if (connected) stringResource(R.string.cloud_account_connected, label) else stringResource(R.string.cloud_account_none, label),
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.padding(16.dp),
         )
-        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = viewModel::connect, enabled = !state.connecting, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
-                Text(stringResource(if (connected) R.string.cloud_reconnect else R.string.cloud_connect, label))
+        state.quota?.let { Text(it, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 16.dp)) }
+        if (provider == CloudProvider.GOOGLE_DRIVE && !state.connecting) {
+            // Identifiant d'application Google personnel : facultatif si XFiles en fournit un.
+            Field(stringResource(R.string.cloud_google_client_id), s.username, stringResource(R.string.cloud_google_client_id_help), KeyboardType.Uri) { viewModel.update(s.copy(username = it)) }
+            Field(stringResource(R.string.cloud_google_client_secret), s.password, null, KeyboardType.Password, secret = true) { viewModel.update(s.copy(password = it)) }
+        }
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (state.connecting) {
+                Text(stringResource(R.string.cloud_waiting, label), style = MaterialTheme.typography.bodyMedium)
+                OutlinedButton(onClick = viewModel::cancelConnect, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(stringResource(R.string.cloud_cancel_connect)) }
+            } else {
+                Button(onClick = viewModel::connect, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) {
+                    Text(stringResource(if (connected) R.string.cloud_reconnect else R.string.cloud_connect, label))
+                }
+                if (!connected) Text(stringResource(R.string.cloud_connect_help), style = MaterialTheme.typography.bodyMedium)
             }
-            if (!connected) Text(stringResource(if (s.protocol == Protocol.GDRIVE) R.string.cloud_connect_help_google else R.string.cloud_connect_help_browser), style = MaterialTheme.typography.bodyMedium)
         }
         if (connected) {
             Field(stringResource(R.string.server_name), s.name, stringResource(R.string.cloud_name_help)) { viewModel.update(s.copy(name = it)) }

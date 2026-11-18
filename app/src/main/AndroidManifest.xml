@@ -58,9 +58,9 @@
             </intent-filter>
         </activity>
 
-        <!-- Retour de la connexion Dropbox / OneDrive dans le navigateur. -->
+        <!-- Lien « Revenir à XFiles » de la page de fin de connexion d'un compte en ligne. -->
         <activity
-            android:name=".OAuthRedirectActivity"
+            android:name=".ReturnActivity"
             android:exported="true"
             android:noHistory="true"
             android:excludeFromRecents="true"

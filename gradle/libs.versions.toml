@@ -28,8 +28,7 @@ commonsNet = "3.13.0"
 okhttp = "5.5.1"
 bouncycastle = "1.85.2"
 bouncycastlePkix = "1.85"
-# Stockage en ligne : connexion Google (services Google Play), onglets de navigateur (Dropbox, OneDrive).
-playServicesAuth = "21.6.0"
+# Comptes en ligne : page de connexion dans un onglet du navigateur.
 browser = "1.10.0"
 # Tests JVM : vraie implémentation de org.json (celle d'Android n'existe que sur le téléphone).
 orgJson = "20260522"
@@ -64,10 +63,8 @@ commons-net = { group = "commons-net", name = "commons-net", version.ref = "comm
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 bcprov = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
 bcpkix = { group = "org.bouncycastle", name = "bcpkix-jdk18on", version.ref = "bouncycastlePkix" }
-play-services-auth = { group = "com.google.android.gms", name = "play-services-auth", version.ref = "playServicesAuth" }
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
 org-json = { group = "org.json", name = "json", version.ref = "orgJson" }
-mockwebserver = { group = "com.squareup.okhttp3", name = "mockwebserver3", version.ref = "okhttp" }
 pdfbox-android = { group = "com.tom-roush", name = "pdfbox-android", version.ref = "pdfbox" }
 commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "commonsCompress" }
 xz = { group = "org.tukaani", name = "xz", version.ref = "xz" }

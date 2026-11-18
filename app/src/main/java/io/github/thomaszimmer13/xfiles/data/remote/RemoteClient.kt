@@ -14,10 +14,11 @@ enum class Protocol(val defaultPort: Int, val scheme: String, val cloud: Boolean
     FTPS(21, "ftps"),
     WEBDAV(443, "webdav"),
 
-    /** Stockage en ligne : compte connecté par OAuth, jeton de renouvellement dans le mot de passe. */
-    GDRIVE(443, "googledrive", cloud = true),
-    DROPBOX(443, "dropbox", cloud = true),
-    ONEDRIVE(443, "onedrive", cloud = true),
+    /**
+     * Compte en ligne par rclone (Google Drive, OneDrive, Dropbox…) : [RemoteServer.host] = type de
+     * service rclone (« drive »), [RemoteServer.basePath] = nom de sa configuration rclone.
+     */
+    CLOUD(443, "cloud", cloud = true),
 }
 
 /**
@@ -41,7 +42,7 @@ data class RemoteServer(
     val hostKey: String = "",
 ) {
     val anonymous: Boolean get() = username.isBlank()
-    val displayAddress: String get() = if (protocol.cloud) username else "${protocol.scheme}://$host" + (if (port != protocol.defaultPort) ":$port" else "") + basePath.let { if (it.isEmpty() || it.startsWith("/")) it else "/$it" }
+    val displayAddress: String get() = if (protocol.cloud) host else "${protocol.scheme}://$host" + (if (port != protocol.defaultPort) ":$port" else "") + basePath.let { if (it.isEmpty() || it.startsWith("/")) it else "/$it" }
 }
 
 /** Élément d'un dossier distant. [path] : chemin absolu sur le serveur, « /Photos/2026/a.jpg ». */
@@ -82,14 +83,12 @@ interface RemoteClient : Closeable {
     val isAlive: Boolean
 
     companion object {
-        fun connect(server: RemoteServer, cloud: CloudAuth? = null): RemoteClient = when (server.protocol) {
+        fun connect(server: RemoteServer, rclone: Rclone? = null): RemoteClient = when (server.protocol) {
             Protocol.SFTP -> SftpRemote(server)
             Protocol.FTP, Protocol.FTPS -> FtpRemote(server)
             Protocol.WEBDAV -> WebDavRemote(server)
             Protocol.SMB -> SmbRemote(server)
-            Protocol.GDRIVE -> GoogleDriveRemote(requireNotNull(cloud).tokens(server))
-            Protocol.DROPBOX -> DropboxRemote(requireNotNull(cloud).tokens(server))
-            Protocol.ONEDRIVE -> OneDriveRemote(requireNotNull(cloud).tokens(server))
+            Protocol.CLOUD -> requireNotNull(rclone).let { RcloneRemote(server.basePath, it, it.transferDir) }
         }
 
         /** « /a/b » + « c » → « /a/b/c ». */

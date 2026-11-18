@@ -31,3 +31,7 @@
 -keep class org.bouncycastle.jce.provider.** { *; }
 -keep class org.bouncycastle.jcajce.provider.** { *; }
 -dontwarn org.slf4j.**
+
+# Pont rclone (gomobile) : classes appelées depuis le code natif Go.
+-keep class go.** { *; }
+-keep class io.github.thomaszimmer13.xfiles.rclone.** { *; }
