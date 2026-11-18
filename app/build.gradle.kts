@@ -110,7 +110,18 @@ dependencies {
 
     // Lecteur de documents
     implementation(libs.jsoup)
-    implementation(libs.pdfbox.android)
+    implementation(libs.pdfbox.android) {
+        // Ancien Bouncy Castle (jdk15to18) remplacé par celui de sshj et smbj (jdk18on), même code.
+        exclude(group = "org.bouncycastle")
+    }
+    implementation(libs.bcprov)
+    implementation(libs.bcpkix)
+
+    // Serveurs : SMB 2/3, SFTP, FTP/FTPS, WebDAV.
+    implementation(libs.smbj)
+    implementation(libs.sshj)
+    implementation(libs.commons.net)
+    implementation(libs.okhttp)
 
     // Reconnaissance de texte : ONNX Runtime (MIT) fait tourner les modèles PaddleOCR (Apache 2.0).
     implementation(libs.onnxruntime.android)

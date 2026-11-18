@@ -36,6 +36,8 @@ data class ExplorerRootUiState(
     val trashCount: Int? = null,
     /** Nombre de fichiers par catégorie ; absent tant qu'il n'est pas connu. */
     val categoryCounts: Map<Category, Int> = emptyMap(),
+    /** Serveurs réseau enregistrés. */
+    val servers: List<io.github.thomaszimmer13.xfiles.data.remote.RemoteServer> = emptyList(),
 )
 
 class ExplorerRootViewModel(application: Application) : AndroidViewModel(application) {
@@ -57,6 +59,10 @@ class ExplorerRootViewModel(application: Application) : AndroidViewModel(applica
     init {
         viewModelScope.launch {
             volumes.locations().collect { applyLocations(it) }
+        }
+        viewModelScope.launch {
+            container.servers.load()
+            container.servers.servers.collect { list -> _state.update { it.copy(servers = list) } }
         }
         viewModelScope.launch {
             preferences.favoriteFolders.collect { paths ->

@@ -74,6 +74,10 @@ class AppContainer(application: Application) {
     /** Reconnaissance de texte (images, PDF scannés, scanner). */
     val ocr = io.github.thomaszimmer13.xfiles.data.ocr.OcrService(application, kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default))
 
+    /** Serveurs réseau (SMB, SFTP, FTP, WebDAV) et leurs connexions. */
+    val servers = io.github.thomaszimmer13.xfiles.data.remote.ServerStore(application)
+    val remote = io.github.thomaszimmer13.xfiles.data.remote.RemoteSessions(kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO))
+
     /** Éléments choisis pour le renommage par lot. */
     val pendingRename = io.github.thomaszimmer13.xfiles.ui.rename.PendingRename()
 

@@ -18,3 +18,16 @@
 
 # ONNX Runtime : la bibliothèque native appelle les classes Java par leur nom (JNI).
 -keep class ai.onnxruntime.** { *; }
+
+# Serveurs réseau. Kerberos (GSS) et expressions EL de mbassador : non utilisés, absents d'Android.
+-dontwarn org.ietf.jgss.**
+-dontwarn javax.el.**
+-dontwarn javax.security.auth.**
+-dontwarn sun.security.**
+# smbj (bus d'événements mbassador par annotations), sshj et Bouncy Castle (algorithmes chargés par leur nom).
+-keep class com.hierynomus.** { *; }
+-keep class net.engio.mbassy.** { *; }
+-keep class net.schmizz.** { *; }
+-keep class org.bouncycastle.jce.provider.** { *; }
+-keep class org.bouncycastle.jcajce.provider.** { *; }
+-dontwarn org.slf4j.**

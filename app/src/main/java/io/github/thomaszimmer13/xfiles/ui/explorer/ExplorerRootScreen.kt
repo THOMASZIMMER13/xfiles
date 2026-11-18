@@ -141,6 +141,21 @@ fun ExplorerRootScreen(
             item(key = "trash") {
                 TrashRow(count = state.trashCount, focusRequester = focusFor("trash"), onOpen = { onOpen(TRASH_ROUTE) })
             }
+            item(key = "header-servers") {
+                SectionHeader(stringResource(R.string.section_servers))
+            }
+            items(state.servers, key = { "srv:" + it.id }) { server ->
+                ServerRow(server, focusFor("srv:" + server.id), onOpen)
+            }
+            item(key = "add-server") {
+                SimpleRow(
+                    icon = R.drawable.ic_add,
+                    title = stringResource(R.string.server_add),
+                    detail = stringResource(R.string.server_add_detail),
+                    focusRequester = focusFor("add-server"),
+                    onClick = { onOpen(io.github.thomaszimmer13.xfiles.ui.browser.Routes.serverEdit(null)) },
+                )
+            }
             if (state.favorites.isNotEmpty()) {
                 item(key = "header-favorites") {
                     SectionHeader(stringResource(R.string.section_favorites))
@@ -270,6 +285,36 @@ private fun FavoriteRow(
             contentDescription = spoken
             if (favorite.exists) onClick(label = openLabel) { onOpen(favorite.path); true }
             customActions = listOf(CustomAccessibilityAction(removeLabel) { onRemove(favorite); true })
+        },
+    )
+}
+
+/** Serveur : « NAS, SMB, 192.168.1.10/Public » ; action « Modifier le serveur ». */
+@Composable
+private fun ServerRow(server: io.github.thomaszimmer13.xfiles.data.remote.RemoteServer, focusRequester: FocusRequester?, onOpen: (String) -> Unit) {
+    val openLabel = stringResource(R.string.action_open)
+    val editLabel = stringResource(R.string.server_edit)
+    val protocol = stringResource(
+        when (server.protocol) {
+            io.github.thomaszimmer13.xfiles.data.remote.Protocol.SMB -> R.string.protocol_smb_short
+            io.github.thomaszimmer13.xfiles.data.remote.Protocol.SFTP -> R.string.protocol_sftp_short
+            io.github.thomaszimmer13.xfiles.data.remote.Protocol.FTP -> R.string.protocol_ftp_short
+            io.github.thomaszimmer13.xfiles.data.remote.Protocol.FTPS -> R.string.protocol_ftps_short
+            io.github.thomaszimmer13.xfiles.data.remote.Protocol.WEBDAV -> R.string.protocol_webdav_short
+        },
+    )
+    val detail = "$protocol, ${server.host}" + server.basePath.takeIf { it.isNotEmpty() }?.let { " " + it.trim('/') }.orEmpty()
+    val open = { onOpen(io.github.thomaszimmer13.xfiles.ui.browser.Routes.remote(server.id)) }
+    RootRow(
+        icon = R.drawable.ic_server,
+        title = server.name,
+        detail = detail,
+        focusRequester = focusRequester,
+        onClick = open,
+        semantics = {
+            contentDescription = "${server.name}, $detail"
+            onClick(label = openLabel) { open(); true }
+            customActions = listOf(CustomAccessibilityAction(editLabel) { onOpen(io.github.thomaszimmer13.xfiles.ui.browser.Routes.serverEdit(server.id)); true })
         },
     )
 }

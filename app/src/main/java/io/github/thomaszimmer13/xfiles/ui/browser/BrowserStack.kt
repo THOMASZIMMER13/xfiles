@@ -18,6 +18,8 @@ import io.github.thomaszimmer13.xfiles.ui.document.DocumentScreen
 import io.github.thomaszimmer13.xfiles.ui.document.EditorScreen
 import io.github.thomaszimmer13.xfiles.ui.scanner.ScannerScreen
 import io.github.thomaszimmer13.xfiles.ui.rename.BatchRenameScreen
+import io.github.thomaszimmer13.xfiles.ui.remote.RemoteFolderScreen
+import io.github.thomaszimmer13.xfiles.ui.remote.ServerEditScreen
 import io.github.thomaszimmer13.xfiles.ui.explorer.FolderScreen
 import io.github.thomaszimmer13.xfiles.ui.storage.CategoryScreen
 import io.github.thomaszimmer13.xfiles.ui.storage.CleanupKind
@@ -46,6 +48,14 @@ object Routes {
     private const val OCR = "xfiles:ocr:"
     private const val SCANNER = "xfiles:scanner:"
     private const val RENAME = "xfiles:renommage:"
+    private const val SERVER = "xfiles:serveur:"
+    private const val SERVER_EDIT = "xfiles:serveur-modifier:"
+
+    /** Dossier [path] (« / » : racine) du serveur [serverId]. */
+    fun remote(serverId: String, path: String = "/") = SERVER + serverId + '\u0000' + path
+
+    /** Ajout (id null) ou modification d'un serveur. */
+    fun serverEdit(serverId: String?) = SERVER_EDIT + serverId.orEmpty()
 
     /** Renommage par lot des éléments posés dans PendingRename (demande numéro [generation]). */
     fun batchRename(generation: Int) = RENAME + generation
@@ -85,6 +95,8 @@ object Routes {
         data class Editor(val path: String) : Route
         data class Scanner(val directory: String) : Route
         data class BatchRename(val generation: Int) : Route
+        data class Remote(val serverId: String, val path: String) : Route
+        data class ServerEdit(val serverId: String?) : Route
     }
 
     fun parse(route: String): Route = when {
@@ -94,6 +106,8 @@ object Routes {
         route.startsWith(CATEGORY) -> runCatching { Route.CategoryList(Category.valueOf(route.removePrefix(CATEGORY))) }.getOrElse { Route.Folder(route) }
         route.startsWith(CLEANUP) -> runCatching { Route.Cleanup(CleanupKind.valueOf(route.removePrefix(CLEANUP))) }.getOrElse { Route.Folder(route) }
         route.startsWith(DOCUMENT) -> Route.DocumentView(route.removePrefix(DOCUMENT))
+        route.startsWith(SERVER_EDIT) -> Route.ServerEdit(route.removePrefix(SERVER_EDIT).ifEmpty { null })
+        route.startsWith(SERVER) -> route.removePrefix(SERVER).let { Route.Remote(it.substringBefore('\u0000'), it.substringAfter('\u0000', "/")) }
         route.startsWith(RENAME) -> Route.BatchRename(route.removePrefix(RENAME).toIntOrNull() ?: 0)
         route.startsWith(SCANNER) -> Route.Scanner(route.removePrefix(SCANNER))
         route.startsWith(OCR) -> Route.DocumentView(route.removePrefix(OCR), ocr = true)
@@ -204,6 +218,8 @@ fun BrowserStack(
             is Routes.Route.CategoryList -> CategoryScreen(route.category, onOpen = ::open, onReveal = ::reveal, onBack = ::goUp)
             is Routes.Route.Cleanup -> CleanupScreen(route.kind, onReveal = ::reveal, onBack = ::goUp)
             is Routes.Route.DocumentView -> DocumentScreen(path = route.path, onOpen = ::open, onBack = ::goUp, ocr = route.ocr)
+            is Routes.Route.Remote -> RemoteFolderScreen(serverId = route.serverId, path = route.path, onOpen = ::open, onBack = ::goUp)
+            is Routes.Route.ServerEdit -> ServerEditScreen(serverId = route.serverId, onBack = ::goUp)
             is Routes.Route.BatchRename -> BatchRenameScreen(generation = route.generation, onBack = ::goUp)
             is Routes.Route.Scanner -> ScannerScreen(directory = route.directory, onOpen = ::open, onBack = ::goUp)
             is Routes.Route.Editor -> EditorScreen(path = route.path, onBack = ::goUp)

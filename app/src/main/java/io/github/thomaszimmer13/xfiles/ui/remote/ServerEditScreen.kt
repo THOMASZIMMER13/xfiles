@@ -1,0 +1,265 @@
+package io.github.thomaszimmer13.xfiles.ui.remote
+
+import android.app.Application
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import io.github.thomaszimmer13.xfiles.R
+import io.github.thomaszimmer13.xfiles.XFilesApplication
+import io.github.thomaszimmer13.xfiles.data.remote.HostKeyException
+import io.github.thomaszimmer13.xfiles.data.remote.Protocol
+import io.github.thomaszimmer13.xfiles.data.remote.RemoteServer
+import io.github.thomaszimmer13.xfiles.ui.components.Announcer
+import io.github.thomaszimmer13.xfiles.ui.components.FocusOnceEffect
+import io.github.thomaszimmer13.xfiles.ui.components.StatusMessage
+import io.github.thomaszimmer13.xfiles.ui.components.XFilesTopBar
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import java.util.UUID
+
+data class ServerEditUiState(
+    val server: RemoteServer = RemoteServer(UUID.randomUUID().toString(), Protocol.SMB, "", ""),
+    val isNew: Boolean = true,
+    val testing: Boolean = false,
+    val hostKey: HostKeyException? = null,
+    val saved: Boolean = false,
+)
+
+class ServerEditViewModel(application: Application) : AndroidViewModel(application) {
+    private val container = (application as XFilesApplication).container
+    private val _state = MutableStateFlow(ServerEditUiState())
+    val state: StateFlow<ServerEditUiState> = _state.asStateFlow()
+    val announcer = Announcer(viewModelScope)
+    private var loaded = false
+
+    fun load(id: String?) {
+        if (loaded) return
+        loaded = true
+        if (id == null) return
+        viewModelScope.launch {
+            if (container.servers.servers.value.isEmpty()) container.servers.load()
+            container.servers.get(id)?.let { s -> _state.update { it.copy(server = s, isNew = false) } }
+        }
+    }
+
+    fun update(server: RemoteServer) = _state.update { it.copy(server = server) }
+
+    /** Change de protocole : le port suit, sauf s'il avait été modifié. */
+    fun setProtocol(p: Protocol) = _state.update { s ->
+        val old = s.server
+        s.copy(server = old.copy(protocol = p, port = if (old.port == old.protocol.defaultPort) p.defaultPort else old.port, hostKey = if (p == Protocol.SFTP) old.hostKey else ""))
+    }
+
+    private fun normalized(): RemoteServer {
+        val s = _state.value.server
+        return s.copy(name = s.name.trim().ifEmpty { s.host.trim() }, host = s.host.trim().removePrefix("${s.protocol.scheme}://").trimEnd('/'), basePath = s.basePath.trim(), username = s.username.trim())
+    }
+
+    fun test() {
+        val server = normalized()
+        if (server.host.isEmpty()) return announcer.announce(text(R.string.server_host_missing))
+        _state.update { it.copy(testing = true) }
+        announcer.announce(text(R.string.server_testing))
+        viewModelScope.launch {
+            try {
+                container.remote.forget(server.id)
+                val count = container.remote.use(server) { it.list("/").size }
+                container.feedback.success()
+                announcer.announce(getApplication<Application>().resources.getQuantityString(R.plurals.server_test_ok, count, count))
+            } catch (e: HostKeyException) {
+                _state.update { it.copy(hostKey = e) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                container.feedback.failure()
+                announcer.announce(remoteErrorText(getApplication(), e))
+            } finally {
+                _state.update { it.copy(testing = false) }
+            }
+        }
+    }
+
+    fun trustHostKey() {
+        val key = _state.value.hostKey ?: return
+        _state.update { it.copy(hostKey = null, server = it.server.copy(hostKey = key.fingerprint)) }
+        test()
+    }
+
+    fun rejectHostKey() = _state.update { it.copy(hostKey = null) }
+
+    fun save() {
+        val server = normalized()
+        if (server.host.isEmpty()) return announcer.announce(text(R.string.server_host_missing))
+        if (server.protocol == Protocol.SMB && server.basePath.isEmpty()) return announcer.announce(text(R.string.server_share_missing))
+        viewModelScope.launch {
+            container.servers.save(server)
+            container.remote.forget(server.id)
+            announcer.announce(text(R.string.server_saved, server.name))
+            _state.update { it.copy(saved = true) }
+        }
+    }
+
+    fun delete() {
+        val id = _state.value.server.id
+        viewModelScope.launch {
+            container.servers.delete(id)
+            container.remote.forget(id)
+            _state.update { it.copy(saved = true) }
+        }
+    }
+
+    private fun text(id: Int, vararg args: Any) = getApplication<Application>().getString(id, *args)
+}
+
+/** Ajout ou modification d'un serveur : protocole, adresse, identifiants, « Tester la connexion ». */
+@Composable
+fun ServerEditScreen(serverId: String?, onBack: () -> Unit, viewModel: ServerEditViewModel = viewModel(key = "server-edit:${serverId ?: "new"}")) {
+    LaunchedEffect(serverId) { viewModel.load(serverId) }
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val announcement by viewModel.announcer.message.collectAsStateWithLifecycle()
+    val s = state.server
+    val titleFocus = remember { FocusRequester() }
+    FocusOnceEffect(ready = true) { titleFocus.requestFocus() }
+    var confirmDelete by remember { mutableStateOf(false) }
+    LaunchedEffect(state.saved) { if (state.saved) onBack() }
+
+    Column(Modifier.fillMaxSize()) {
+        XFilesTopBar(title = stringResource(if (state.isNew) R.string.server_add else R.string.server_edit), onBack = onBack, titleFocus = titleFocus)
+        StatusMessage(announcement)
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
+            Text(stringResource(R.string.server_protocol), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 16.dp, top = 8.dp).semantics { heading() })
+            Column(Modifier.selectableGroup()) {
+                listOf(
+                    Protocol.SMB to R.string.protocol_smb,
+                    Protocol.SFTP to R.string.protocol_sftp,
+                    Protocol.WEBDAV to R.string.protocol_webdav,
+                    Protocol.FTP to R.string.protocol_ftp,
+                    Protocol.FTPS to R.string.protocol_ftps,
+                ).forEach { (p, label) ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(selected = s.protocol == p, role = Role.RadioButton) { viewModel.setProtocol(p) }.padding(horizontal = 16.dp),
+                    ) {
+                        RadioButton(selected = s.protocol == p, onClick = null)
+                        Spacer(Modifier.width(12.dp))
+                        Text(stringResource(label), style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            }
+            Field(stringResource(R.string.server_name), s.name, stringResource(R.string.server_name_help)) { viewModel.update(s.copy(name = it)) }
+            Field(stringResource(R.string.server_host), s.host, stringResource(R.string.server_host_help), KeyboardType.Uri) { viewModel.update(s.copy(host = it)) }
+            Field(stringResource(R.string.server_port), s.port.toString(), null, KeyboardType.Number) { v -> v.filter(Char::isDigit).take(5).toIntOrNull()?.let { viewModel.update(s.copy(port = it)) } }
+            val pathLabel = when (s.protocol) {
+                Protocol.SMB -> R.string.server_share
+                Protocol.WEBDAV -> R.string.server_dav_path
+                else -> R.string.server_start_path
+            }
+            val pathHelp = when (s.protocol) {
+                Protocol.SMB -> R.string.server_share_help
+                Protocol.WEBDAV -> R.string.server_dav_path_help
+                else -> R.string.server_start_path_help
+            }
+            Field(stringResource(pathLabel), s.basePath, stringResource(pathHelp), KeyboardType.Uri) { viewModel.update(s.copy(basePath = it)) }
+            Field(stringResource(R.string.server_user), s.username, stringResource(R.string.server_user_help)) { viewModel.update(s.copy(username = it)) }
+            Field(stringResource(R.string.server_password), s.password, null, KeyboardType.Password, secret = true) { viewModel.update(s.copy(password = it)) }
+            if (s.protocol == Protocol.SMB) Field(stringResource(R.string.server_domain), s.domain, stringResource(R.string.server_domain_help)) { viewModel.update(s.copy(domain = it)) }
+            if (s.protocol == Protocol.WEBDAV) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).toggleable(value = s.secure, role = Role.Switch) {
+                        viewModel.update(s.copy(secure = it, port = if (s.port == 443 && !it) 80 else if (s.port == 80 && it) 443 else s.port))
+                    }.padding(horizontal = 16.dp),
+                ) {
+                    Text(stringResource(R.string.server_https), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                    Switch(checked = s.secure, onCheckedChange = null)
+                }
+            }
+            if (s.hostKey.isNotEmpty()) {
+                Text(stringResource(R.string.server_host_key_known, s.hostKey), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(16.dp))
+            }
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = viewModel::test, enabled = !state.testing, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.server_test)) }
+                Button(onClick = viewModel::save, modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp)) { Text(stringResource(R.string.server_save)) }
+                if (!state.isNew) TextButton(onClick = { confirmDelete = true }) { Text(stringResource(R.string.server_delete)) }
+            }
+        }
+    }
+
+    state.hostKey?.let { key ->
+        AlertDialog(
+            onDismissRequest = viewModel::rejectHostKey,
+            title = { Text(stringResource(if (key.changed) R.string.remote_host_key_changed_title else R.string.remote_host_key_title), modifier = Modifier.semantics { heading() }) },
+            text = { Text(stringResource(if (key.changed) R.string.remote_host_key_changed_message else R.string.remote_host_key_message, key.fingerprint)) },
+            confirmButton = { TextButton(onClick = viewModel::trustHostKey) { Text(stringResource(R.string.remote_host_key_trust)) } },
+            dismissButton = { TextButton(onClick = viewModel::rejectHostKey) { Text(stringResource(R.string.action_cancel)) } },
+        )
+    }
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text(stringResource(R.string.server_delete_title), modifier = Modifier.semantics { heading() }) },
+            text = { Text(stringResource(R.string.server_delete_message, s.name)) },
+            confirmButton = { TextButton(onClick = { confirmDelete = false; viewModel.delete() }) { Text(stringResource(R.string.server_delete)) } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.action_cancel)) } },
+        )
+    }
+}
+
+@Composable
+private fun Field(label: String, value: String, help: String?, keyboard: KeyboardType = KeyboardType.Text, secret: Boolean = false, onChange: (String) -> Unit) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onChange,
+        label = { Text(label) },
+        supportingText = help?.let { { Text(it) } },
+        singleLine = true,
+        visualTransformation = if (secret) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+        keyboardOptions = KeyboardOptions(keyboardType = keyboard, autoCorrectEnabled = false),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+    )
+}

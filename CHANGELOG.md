@@ -60,6 +60,14 @@ Première version publique : un gestionnaire de fichiers pensé d'abord pour Tal
 - PDF protégés par mot de passe ; PDF scannés signalés, avec « Ouvrir avec ».
 - Éditeur de texte (jusqu'à 2 Mo) : vrai champ de saisie Android, encodage et fins de ligne conservés, enregistrement sans risque, avertissement en quittant sans enregistrer. Bouton « Nouveau fichier texte » dans chaque dossier.
 
+### Serveurs réseau
+- Section « Serveurs » de l'Explorer : « Ajouter un serveur » (partage Windows ou NAS en SMB 2/3, SFTP, WebDAV comme Nextcloud, FTP et FTPS).
+- « Tester la connexion » annonce le résultat ; mots de passe chiffrés par le Keystore d'Android, jamais sauvegardés.
+- SFTP : empreinte de la clé du serveur à accepter la première fois, puis vérifiée ; alerte si elle change.
+- Navigation dans les dossiers du serveur ; ouvrir un fichier le copie dans le téléphone (lecteur de documents, lecteur audio et vidéo…).
+- Actions : Télécharger dans Téléchargements (dossiers compris), Renommer, Supprimer du serveur, Nouveau dossier ; « Envoyer ici » envoie le presse-papiers d'XFiles.
+- Transferts avec avancement et Annuler ; connexion rouverte toute seule après une coupure.
+
 ### Renommage par lot
 - Depuis la sélection : bouton « Renommer ».
 - Rechercher et remplacer (texte ou expression régulière, avec groupes $1…), ou modèle avec balises {nom}, {n}, {date}, {ext} ; numéro de départ et nombre de chiffres.

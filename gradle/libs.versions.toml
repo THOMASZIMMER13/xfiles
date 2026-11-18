@@ -21,6 +21,13 @@ pdfbox = "2.0.27.0"
 # Reconnaissance de texte (modèles PaddleOCR PP-OCRv5, téléchargés à la première utilisation).
 onnxruntime = "1.31.1"
 camerax = "1.6.2"
+# Serveurs réseau (Apache 2.0) ; Bouncy Castle unifié (sshj, smbj et pdfbox).
+smbj = "0.15.0"
+sshj = "0.41.2"
+commonsNet = "3.13.0"
+okhttp = "5.5.1"
+bouncycastle = "1.85.2"
+bouncycastlePkix = "1.85"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -46,6 +53,12 @@ onnxruntime-jvm = { group = "com.microsoft.onnxruntime", name = "onnxruntime", v
 camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
 camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
 camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "camerax" }
+smbj = { group = "com.hierynomus", name = "smbj", version.ref = "smbj" }
+sshj = { group = "com.hierynomus", name = "sshj", version.ref = "sshj" }
+commons-net = { group = "commons-net", name = "commons-net", version.ref = "commonsNet" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
+bcprov = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
+bcpkix = { group = "org.bouncycastle", name = "bcpkix-jdk18on", version.ref = "bouncycastlePkix" }
 pdfbox-android = { group = "com.tom-roush", name = "pdfbox-android", version.ref = "pdfbox" }
 commons-compress = { group = "org.apache.commons", name = "commons-compress", version.ref = "commonsCompress" }
 xz = { group = "org.tukaani", name = "xz", version.ref = "xz" }
