@@ -1,5 +1,6 @@
 package io.github.thomaszimmer13.xfiles.data.source
 
+import io.github.thomaszimmer13.xfiles.data.fs.deleteRecursivelyNoFollow
 import io.github.thomaszimmer13.xfiles.data.source.FileOperationException.Reason
 import io.github.thomaszimmer13.xfiles.data.trash.LocalTrash
 import kotlinx.coroutines.Dispatchers
@@ -61,7 +62,7 @@ class LocalFileSource : FileSource {
             val file = File(path)
             if (!file.exists()) fail(Reason.NOT_FOUND, file)
             if (file.parentFile?.canWrite() == false) fail(Reason.DENIED, file)
-            if (!file.deleteRecursively()) fail(Reason.FAILED, file)
+            if (!deleteRecursivelyNoFollow(file)) fail(Reason.FAILED, file)
         }
 
     private fun fail(reason: Reason, file: File): Nothing =

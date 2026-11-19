@@ -27,6 +27,10 @@ class SmbRemote(server: RemoteServer) : RemoteClient {
         SmbConfig.builder()
             .withTimeout(30, TimeUnit.SECONDS)
             .withSoTimeout(60, TimeUnit.SECONDS)
+            // N-15 : chiffrement SMB 3 dès que le serveur le propose, et messages signés. Les vieux
+            // serveurs SMB 2 sans chiffrement restent joignables (signature si possible).
+            .withEncryptData(true)
+            .withSigningEnabled(true)
             .build(),
     )
     private val connection: Connection

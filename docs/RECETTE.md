@@ -32,6 +32,9 @@ Notation : **D** = toucher deux fois, **G/D** = balayer à gauche/à droite,
 - [ ] Copier puis « Coller ici » : la progression ne bavarde pas (paliers de 10 % seulement en y plaçant le focus), le bilan est annoncé à la fin.
 - [ ] Conflit de nom : titre lu comme titre ; Remplacer, Garder les deux, Ignorer, Annuler le collage accessibles ; « Appliquer à tous » est une case à cocher.
 - [ ] Annuler une copie longue : l'original est intact, aucun fichier `.xfiles-remplace-…` ne reste.
+- [ ] Copier un fichier de plus de 4 Go vers une carte SD ou une clé en FAT32 : refus annoncé avant de commencer.
+- [ ] Copier plus que la place libre : « Pas assez d'espace libre » annoncé avant de commencer.
+- [ ] Dossier de 10 000 fichiers ou plus (DCIM/Camera) : ouverture et changement de tri sans blocage de TalkBack.
 
 ## 4. Archives
 
@@ -52,6 +55,11 @@ Notation : **D** = toucher deux fois, **G/D** = balayer à gauche/à droite,
 - [ ] Google Drive, OneDrive, Dropbox : connexion dans le navigateur, retour dans XFiles, listage.
 - [ ] Coffre : mauvais mot de passe annoncé comme tel ; serveur injoignable annoncé comme panne, pas comme mauvais mot de passe.
 - [ ] Coffre ouvert : l'aperçu de l'app est masqué dans les applications récentes.
+
+- [ ] WebDAV en HTTP vers un NAS du réseau local (192.168.x.x) : listage correct ; vers une adresse Internet : refus expliqué.
+- [ ] Serveur WebDAV renvoyant des adresses complètes (IIS, certains NAS) : listage correct.
+- [ ] Média lu depuis un coffre : la notification et l'écran verrouillé affichent « Fichier du coffre », l'app annonce le vrai nom.
+- [ ] Fermer les coffres : le fichier ouvert depuis un coffre n'apparaît pas dans les Récents.
 
 ## 6. Double panneau et onglets
 

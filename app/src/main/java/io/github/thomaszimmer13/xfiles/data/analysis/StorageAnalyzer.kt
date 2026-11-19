@@ -1,5 +1,6 @@
 package io.github.thomaszimmer13.xfiles.data.analysis
 
+import io.github.thomaszimmer13.xfiles.data.fs.isSymlink
 import io.github.thomaszimmer13.xfiles.data.media.Categories
 import io.github.thomaszimmer13.xfiles.data.trash.LocalTrash
 import kotlinx.coroutines.CancellationException
@@ -117,7 +118,7 @@ class StorageAnalyzer(private val volumeRoots: () -> List<String>) {
                 while (pending.isNotEmpty()) {
                     coroutineContext.ensureActive()
                     for (child in pending.removeFirst().listFiles().orEmpty()) {
-                        if (!keep(child)) continue
+                        if (!keep(child) || child.isSymlink()) continue
                         if (child.isDirectory) {
                             pending.add(child)
                         } else {

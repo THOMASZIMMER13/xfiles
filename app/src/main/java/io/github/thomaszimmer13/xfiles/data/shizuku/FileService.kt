@@ -1,5 +1,6 @@
 package io.github.thomaszimmer13.xfiles.data.shizuku
 
+import io.github.thomaszimmer13.xfiles.data.fs.deleteRecursivelyNoFollow
 import android.os.ParcelFileDescriptor
 import org.json.JSONArray
 import org.json.JSONObject
@@ -77,7 +78,10 @@ class FileService(base: String = ShizukuAccess.ROOT) : IFileService.Stub() {
 
     override fun delete(path: String) {
         val file = existing(path, write = true)
-        if (!file.deleteRecursively()) fail(DENIED)
+        // Jamais dans un lien (N-01) : un lien posé par une app dans son Android/data mènerait ailleurs,
+        // avec les droits « shell ». Chaque élément doit rester dans data, obb ou media.
+        val boundary = roots.first { file.path.startsWith("$it/") }
+        if (!deleteRecursivelyNoFollow(file, File(boundary))) fail(DENIED)
     }
 
     override fun exists(path: String): Boolean = checked(path, write = false).exists()

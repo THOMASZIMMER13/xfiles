@@ -1,5 +1,6 @@
 package io.github.thomaszimmer13.xfiles.data.trash
 
+import io.github.thomaszimmer13.xfiles.data.fs.deleteRecursivelyNoFollow
 import io.github.thomaszimmer13.xfiles.data.source.FileOperationException
 import io.github.thomaszimmer13.xfiles.data.source.FileOperationException.Reason
 import io.github.thomaszimmer13.xfiles.domain.NameValidator
@@ -112,7 +113,7 @@ class LocalTrash(
     /** Supprime définitivement un élément de la corbeille. */
     fun deleteForever(entry: TrashEntry) {
         val stored = File(entry.storedPath)
-        if (stored.exists() && !stored.deleteRecursively()) fail(Reason.FAILED, entry.name)
+        if (!deleteRecursivelyNoFollow(stored, File(entry.trashDir))) fail(Reason.FAILED, entry.name)
         infoFile(entry).delete()
     }
 

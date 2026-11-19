@@ -1,5 +1,7 @@
 package io.github.thomaszimmer13.xfiles.data.archive
 
+import io.github.thomaszimmer13.xfiles.data.fs.deleteRecursivelyNoFollow
+import io.github.thomaszimmer13.xfiles.data.fs.walkNoLinks
 import io.github.thomaszimmer13.xfiles.data.source.FileOperationException
 import io.github.thomaszimmer13.xfiles.data.source.FileOperationException.Reason
 import io.github.thomaszimmer13.xfiles.data.transfer.TransferCancelledException
@@ -95,7 +97,7 @@ object ZipArchive {
                 }
             }
         } catch (e: Exception) {
-            top.deleteRecursively()
+            deleteRecursivelyNoFollow(top)
             throw e
         }
         return top.path
@@ -110,7 +112,7 @@ object ZipArchive {
             ZipOutputStream(target.outputStream().buffered()).use { out ->
                 for (source in sources) {
                     val base = source.parentFile ?: continue
-                    source.walkTopDown().forEach { file ->
+                    source.walkNoLinks().forEach { file ->
                         if (listener.isCancelled) throw TransferCancelledException()
                         val relative = file.relativeTo(base).invariantSeparatorsPath
                         val entry = ZipEntry(if (file.isDirectory) "$relative/" else relative).apply { time = file.lastModified() }

@@ -1,5 +1,8 @@
 package io.github.thomaszimmer13.xfiles.data.transfer
 
+import io.github.thomaszimmer13.xfiles.data.fs.childrenNoLinks
+import io.github.thomaszimmer13.xfiles.data.fs.walkNoLinks
+import io.github.thomaszimmer13.xfiles.data.fs.deleteRecursivelyNoFollow
 import io.github.thomaszimmer13.xfiles.data.source.FileOperationException
 import io.github.thomaszimmer13.xfiles.data.source.FileOperationException.Reason
 import io.github.thomaszimmer13.xfiles.domain.NameValidator
@@ -44,7 +47,7 @@ class TransferCancelledException : IOException("Transfert annulé")
 
 /** Taille totale d'un fichier ou d'un dossier, contenu compris. */
 fun sizeOf(file: File): Long =
-    if (file.isDirectory) file.walkTopDown().filter { it.isFile }.sumOf { it.length() } else file.length()
+    if (file.isDirectory) file.walkNoLinks().filter { it.isFile }.sumOf { it.length() } else file.length()
 
 /** Copie un flux par blocs, en signalant la progression et en s'arrêtant si l'utilisateur annule. */
 fun copyStream(input: InputStream, output: OutputStream, listener: TransferListener) {
@@ -161,7 +164,7 @@ class LocalTransfer(
             } else {
                 // Autre volume : copie puis suppression de l'original.
                 copy(src, target, listener)
-                if (!src.deleteRecursively()) fail(Reason.FAILED, src.path)
+                if (!deleteRecursivelyNoFollow(src)) fail(Reason.FAILED, src.path)
             }
         }
     }
@@ -188,20 +191,20 @@ class LocalTransfer(
             if (!rename(old, aside)) {
                 // Volume sans renommage possible : nouveau en place après suppression de l'ancien.
                 if (renamed) rename(fresh, src)
-                fresh.deleteRecursively()
+                deleteRecursivelyNoFollow(fresh)
                 return replaceDirectly(src, old, target, mode, listener)
             }
             if (!rename(fresh, target)) {
                 rename(aside, old)
                 if (renamed) rename(fresh, src)
-                fresh.deleteRecursively()
+                deleteRecursivelyNoFollow(fresh)
                 fail(Reason.FAILED, src.path)
             }
-            aside.deleteRecursively()
+            deleteRecursivelyNoFollow(aside)
             if (renamed) listener.onBytes(sizeOf(target))
-            else if (mode == TransferMode.MOVE && !src.deleteRecursively()) fail(Reason.FAILED, src.path)
+            else if (mode == TransferMode.MOVE && !deleteRecursivelyNoFollow(src)) fail(Reason.FAILED, src.path)
         } catch (e: Exception) {
-            fresh.deleteRecursively()
+            deleteRecursivelyNoFollow(fresh)
             if (aside.exists() && !old.exists()) rename(aside, old)
             throw e
         } finally {
@@ -210,7 +213,7 @@ class LocalTransfer(
     }
 
     private fun replaceDirectly(src: File, old: File, target: File, mode: TransferMode, listener: TransferListener) {
-        if (!old.deleteRecursively()) fail(Reason.DENIED, src.path)
+        if (!deleteRecursivelyNoFollow(old)) fail(Reason.DENIED, src.path)
         place(src, target, mode, listener)
     }
 
@@ -244,9 +247,9 @@ class LocalTransfer(
             val kind = rest.drop(9).take(2) // « a- » ou « n- » après l'identifiant
             val original = rest.drop(11)
             when {
-                kind == "n-" -> f.deleteRecursively()
+                kind == "n-" -> deleteRecursivelyNoFollow(f)
                 kind == "a-" && original.isNotEmpty() && !File(dir, original).exists() -> f.renameTo(File(dir, original))
-                else -> f.deleteRecursively()
+                else -> deleteRecursivelyNoFollow(f)
             }
         }
     }
@@ -256,16 +259,18 @@ class LocalTransfer(
             copyTree(src, target, listener)
         } catch (e: Exception) {
             // Pas de copie à moitié faite : on retire ce qui a déjà été écrit.
-            target.deleteRecursively()
+            deleteRecursivelyNoFollow(target)
             if (e is TransferCancelledException) throw e
-            fail(Reason.FAILED, src.path)
+            // Disque plein ou fichier trop gros pour ce support : on le dit (N-08).
+            fail(DiskLimits.reasonOf(e) ?: Reason.FAILED, src.path)
         }
     }
 
     private fun copyTree(src: File, target: File, listener: TransferListener) {
         if (src.isDirectory) {
             if (!target.mkdir()) throw IOException("mkdir ${target.path}")
-            src.listFiles()?.forEach { child -> copyTree(child, File(target, child.name), listener) }
+            // Liens symboliques ignorés (N-11) : ni boucle, ni contenu pris hors de la sélection.
+            src.childrenNoLinks().forEach { child -> copyTree(child, File(target, child.name), listener) }
         } else {
             if (target.exists()) throw IOException("existe déjà ${target.path}")
             src.inputStream().use { input -> target.outputStream().use { output -> copyStream(input, output, listener) } }

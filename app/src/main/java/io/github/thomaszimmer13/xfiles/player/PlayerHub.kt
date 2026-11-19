@@ -1,5 +1,6 @@
 package io.github.thomaszimmer13.xfiles.player
 
+import io.github.thomaszimmer13.xfiles.data.fs.Ephemeral
 import android.app.Application
 import android.content.ComponentName
 import android.net.Uri
@@ -235,11 +236,19 @@ class PlayerHub(
     private fun mediaItemFor(entry: PlaylistEntry, hls: Boolean = false): MediaItem {
         val uri = if (entry.isRemote) entry.location.toUri() else Uri.fromFile(File(entry.location))
         val fallback = entry.title ?: if (entry.isRemote) entry.location else File(entry.location).nameWithoutExtension
+        // Média de coffre (copie de passage) : titre neutre pour la notification, l'écran verrouillé et
+        // le Bluetooth (N-10). Les champs du MediaItem l'emportent sur ceux lus dans le fichier (ID3…).
+        val metadata = if (isPrivate(entry.location)) {
+            val neutral = app.getString(R.string.player_private_title)
+            MediaMetadata.Builder().setTitle(neutral).setDisplayTitle(neutral).setArtist("").setAlbumTitle("").setAlbumArtist("").setSubtitle("").build()
+        } else {
+            // Titre de secours : le titre lu dans le fichier (ID3…) le remplace s'il existe.
+            MediaMetadata.Builder().setDisplayTitle(fallback).build()
+        }
         val builder = MediaItem.Builder()
             .setMediaId(entry.location)
             .setUri(uri)
-            // Titre de secours : le titre lu dans le fichier (ID3…) le remplace s'il existe.
-            .setMediaMetadata(MediaMetadata.Builder().setDisplayTitle(fallback).build())
+            .setMediaMetadata(metadata)
         if (hls || entry.location.endsWith(".m3u8", true)) builder.setMimeType(MimeTypes.APPLICATION_M3U8)
         if (!entry.isRemote && MediaKinds.isVideo(entry.location)) {
             val video = File(entry.location)
@@ -577,7 +586,11 @@ class PlayerHub(
                 isVideo = MediaKinds.isVideo(id) || c.videoSize.width > 0,
                 queue = (0 until c.mediaItemCount).map { i ->
                     val item = c.getMediaItemAt(i)
-                    val title = if (i == c.currentMediaItemIndex) currentTitle(c) else item.mediaMetadata.displayTitle?.toString() ?: item.mediaId
+                    val title = when {
+                        i == c.currentMediaItemIndex -> currentTitle(c)
+                        isPrivate(item.mediaId) -> File(item.mediaId).nameWithoutExtension
+                        else -> item.mediaMetadata.displayTitle?.toString() ?: item.mediaId
+                    }
                     QueueItem(item.mediaId, title, if (i == c.currentMediaItemIndex) c.duration else C.TIME_UNSET)
                 },
                 audioTracks = options(tracks, C.TRACK_TYPE_AUDIO),
@@ -588,7 +601,12 @@ class PlayerHub(
         }
     }
 
+    /** Copie de passage dans le cache (coffre ouvert, serveur) : jamais nommée hors de l'app. */
+    private fun isPrivate(location: String): Boolean = !location.contains("://") && Ephemeral.isEphemeral(location, app.cacheDir)
+
     private fun currentTitle(c: Player): String {
+        // Dans l'app, le vrai nom reste annoncé pour un média de coffre.
+        c.currentMediaItem?.mediaId?.takeIf(::isPrivate)?.let { return File(it).nameWithoutExtension }
         val meta = c.mediaMetadata
         return meta.title?.toString()?.ifBlank { null }
             ?: meta.displayTitle?.toString()?.ifBlank { null }

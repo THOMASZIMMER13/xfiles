@@ -1,5 +1,6 @@
 package io.github.thomaszimmer13.xfiles.data.ocr
 
+import io.github.thomaszimmer13.xfiles.data.fs.Ephemeral
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -220,7 +221,9 @@ class OcrService(context: Context, private val scope: CoroutineScope) {
     private fun cacheFile(file: File): File {
         val key = "${file.absolutePath}|${file.length()}|${file.lastModified()}"
         val hash = MessageDigest.getInstance("SHA-1").digest(key.toByteArray()).joinToString("") { "%02x".format(it) }
-        return File(cacheDir, "$hash.txt")
+        // Fichier du cache (coffre, serveur, aperçu) : texte rangé à part, purgé avec les coffres (N-05).
+        val dir = if (Ephemeral.isEphemeral(file.path, app.cacheDir)) File(app.cacheDir, Ephemeral.OCR_DIR) else cacheDir
+        return File(dir, "$hash.txt")
     }
 
     /** Pages (paragraphes) déjà reconnues pour ce fichier, ou null. */
@@ -230,8 +233,9 @@ class OcrService(context: Context, private val scope: CoroutineScope) {
 
     fun store(file: File, pages: List<List<String>>) {
         runCatching {
-            cacheDir.mkdirs()
-            cacheFile(file).writeText(pages.joinToString(PAGE_SEPARATOR) { it.joinToString("\n") })
+            val target = cacheFile(file)
+            target.parentFile?.mkdirs()
+            target.writeText(pages.joinToString(PAGE_SEPARATOR) { it.joinToString("\n") })
         }
     }
 

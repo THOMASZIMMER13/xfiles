@@ -486,6 +486,7 @@
     <string name="action_keep_oldest">Garder le plus ancien de chaque groupe</string>
     <string name="position_only" tools:ignore="PluralsCandidate">%1$d sur %2$d</string>
     <!-- Lecteur audio et vidéo -->
+    <string name="player_private_title">Fichier du coffre</string>
     <string name="player_minimize">Réduire le lecteur</string>
     <string name="player_open">ouvrir le lecteur</string>
     <string name="player_play">Lecture</string>
@@ -965,6 +966,7 @@
     <string name="remote_error_denied">Accès refusé par le serveur.</string>
     <string name="remote_error_exists">Un élément porte déjà ce nom sur le serveur.</string>
     <string name="remote_error_tls">Connexion sécurisée impossible (certificat refusé).</string>
+    <string name="remote_error_cleartext">Connexion non chiffrée refusée : elle n\'est permise que vers un serveur du réseau local. Cochez la connexion sécurisée (HTTPS).</string>
     <string name="remote_error_protocol">Le serveur a répondu de façon inattendue.</string>
 
     <!-- Étape 19 : onglets et double panneau -->
@@ -1109,6 +1111,7 @@
     <string name="cloud_config_reset">La configuration des comptes en ligne était abîmée et a été mise de côté. Reconnectez ce compte depuis « Modifier ».</string>
     <string name="op_encrypted_unsupported">%1$s est une archive RAR chiffrée : XFiles ne sait pas encore l\'ouvrir.</string>
     <string name="op_no_space">Pas assez d\'espace libre pour %1$s.</string>
+    <string name="op_too_large_for_fs">Impossible de copier %1$s : un fichier dépasse 4 Go, la limite d\'une carte ou d\'une clé formatée en FAT32.</string>
     <string name="op_too_big">Extraction de %1$s arrêtée : l\'archive se décompresse en bien plus que ce qu\'elle annonçait.</string>
     <string name="extract_large_title">Archive très volumineuse</string>
     <string name="extract_large_message">%1$s se décompresse en %2$s à partir de %3$s seulement. Cela peut remplir le téléphone. Extraire quand même ?</string>

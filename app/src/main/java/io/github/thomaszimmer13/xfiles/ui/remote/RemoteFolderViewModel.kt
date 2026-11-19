@@ -1,5 +1,7 @@
 package io.github.thomaszimmer13.xfiles.ui.remote
 
+import io.github.thomaszimmer13.xfiles.data.fs.childrenNoLinks
+import io.github.thomaszimmer13.xfiles.data.fs.deleteRecursivelyNoFollow
 import android.app.Application
 import android.os.Environment
 import androidx.lifecycle.AndroidViewModel
@@ -302,7 +304,7 @@ class RemoteFolderViewModel(application: Application) : AndroidViewModel(applica
                     existing += name
                     send(c, File(item.path), RemoteClient.child(path, name), onProgress)
                     // Déplacer : l'original n'est supprimé qu'une fois envoyé (coffre : il ne reste que la copie chiffrée).
-                    if (moving) File(item.path).deleteRecursively()
+                    if (moving) deleteRecursivelyNoFollow(File(item.path))
                 }
             }
             container.clipboard.clear()
@@ -315,7 +317,7 @@ class RemoteFolderViewModel(application: Application) : AndroidViewModel(applica
     private fun send(c: RemoteClient, file: File, remotePath: String, onProgress: (Long, Long) -> Unit) {
         if (file.isDirectory) {
             c.mkdir(remotePath)
-            file.listFiles()?.forEach { send(c, it, RemoteClient.child(remotePath, it.name), onProgress) }
+            file.childrenNoLinks().forEach { send(c, it, RemoteClient.child(remotePath, it.name), onProgress) }
         } else {
             file.inputStream().use { c.upload(it, file.length(), remotePath) { done, total -> onProgress(done, total) } }
         }
@@ -421,6 +423,7 @@ fun remoteErrorText(app: Application, e: Throwable, cloud: Boolean = false): Str
             RemoteException.Reason.EXISTS -> R.string.remote_error_exists
             RemoteException.Reason.TLS -> R.string.remote_error_tls
             RemoteException.Reason.PROTOCOL -> R.string.remote_error_protocol
+            RemoteException.Reason.CLEARTEXT -> R.string.remote_error_cleartext
         },
     )
     else -> app.getString(R.string.remote_error_protocol)

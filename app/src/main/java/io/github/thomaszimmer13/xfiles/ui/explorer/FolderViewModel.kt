@@ -106,7 +106,8 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             preferences.sortOptions.collect { options ->
                 val previous = _state.value.sort
-                _state.update { it.copy(sort = options, items = FileSorter.sort(rawItems, options)) }
+                val sorted = sorted(rawItems, options)
+                _state.update { it.copy(sort = options, items = sorted) }
                 // Afficher ou masquer les fichiers cachés demande de relire le dossier.
                 val path = _state.value.path
                 if (path != null && previous.showHidden != options.showHidden) reload(path)
@@ -125,7 +126,7 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
             // Fin d'une opération : le dossier affiché a pu changer ; focus sur l'élément créé s'il est ici.
             transfers.outcomes.collect { outcome ->
                 val path = _state.value.path ?: return@collect
-                runCatching { refreshQuietly(path) }
+                refreshSafely(path)
                 if (outcome.targetDir == path && outcome.focusPath != null) {
                     _state.update { it.copy(focusRequest = FocusRequest.Item(outcome.focusPath)) }
                 }
@@ -159,7 +160,9 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
         loadJob = viewModelScope.launch {
             try {
                 rawItems = fileSource.list(path, includeHidden = _state.value.sort.showHidden)
-                _state.update { it.copy(items = FileSorter.sort(rawItems, it.sort), loading = false) }
+                val options = _state.value.sort
+                val sorted = sorted(rawItems, options)
+                _state.update { it.copy(items = if (it.sort == options) sorted else FileSorter.sort(rawItems, it.sort), loading = false) }
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
@@ -172,15 +175,32 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
     /** Relit le dossier affiché sans perdre le focus (après l'ajout d'un fichier, par exemple). */
     fun refreshNow() {
         val path = _state.value.path ?: return
-        viewModelScope.launch { runCatching { refreshQuietly(path) } }
+        viewModelScope.launch { refreshSafely(path) }
+    }
+
+    /** Tri hors du fil principal (N-07) : un dossier de 50 000 fichiers ne fige ni l'écran ni TalkBack. */
+    private suspend fun sorted(items: List<FileItem>, options: SortOptions): List<FileItem> =
+        withContext(Dispatchers.Default) { FileSorter.sort(items, options) }
+
+    /** Relecture discrète dont l'échec est sans gravité, mais qui laisse passer l'annulation (N-13). */
+    private suspend fun refreshSafely(path: String) {
+        try {
+            refreshQuietly(path)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Dossier disparu ou illisible : l'affichage reste tel quel.
+        }
     }
 
     /** Contenu relu sans passer par l'état « Chargement… », pour ne pas faire perdre le focus. */
     private suspend fun refreshQuietly(path: String) {
         rawItems = fileSource.list(path, includeHidden = _state.value.sort.showHidden)
         val present = rawItems.mapTo(HashSet()) { it.path }
+        val options = _state.value.sort
+        val sorted = sorted(rawItems, options)
         _state.update {
-            it.copy(items = FileSorter.sort(rawItems, it.sort), error = false, selected = it.selected intersect present)
+            it.copy(items = if (it.sort == options) sorted else FileSorter.sort(rawItems, it.sort), error = false, selected = it.selected intersect present)
         }
     }
 
@@ -373,7 +393,7 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
             val before = _state.value.items.map { it.path }
-            runCatching { refreshQuietly(parent) }
+            refreshSafely(parent)
             _state.update {
                 it.copy(selecting = false, selected = emptySet(), focusRequest = focusAfterRemoval(before, done))
             }
@@ -490,7 +510,7 @@ class FolderViewModel(application: Application) : AndroidViewModel(application) 
                 announcer.announce(app.getString(R.string.deleted_forever, item.name))
             } catch (e: FileOperationException) {
                 // Une suppression partielle a pu avoir lieu : on relit le dossier.
-                runCatching { refreshQuietly(parent) }
+                refreshSafely(parent)
                 announcer.announce(app.getString(e.reason.message(), item.name))
             } catch (e: CancellationException) {
                 throw e
@@ -546,6 +566,7 @@ internal fun FileOperationException.Reason.message(): Int = when (this) {
     FileOperationException.Reason.ENCRYPTED_UNSUPPORTED -> R.string.op_encrypted_unsupported
     FileOperationException.Reason.NO_SPACE -> R.string.op_no_space
     FileOperationException.Reason.TOO_BIG -> R.string.op_too_big
+    FileOperationException.Reason.FILE_TOO_LARGE_FOR_FS -> R.string.op_too_large_for_fs
 }
 
 /** Libellé d'un critère de tri. */

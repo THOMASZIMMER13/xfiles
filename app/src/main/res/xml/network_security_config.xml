@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Audit N-06. Le HTTP en clair n'est utile qu'au WebDAV d'un NAS du réseau local, souvent saisi par
+  son adresse IP (192.168.x.x) : la configuration réseau d'Android ne sait pas désigner une plage
+  d'adresses, seulement des noms. Le clair est donc permis ici, et XFiles le refuse lui-même pour
+  tout serveur hors du réseau local (LocalNetwork.isLocalHost, contrôlé avant toute connexion
+  WebDAV). Les comptes en ligne (rclone) et les serveurs FTPS, SFTP et SMB ne passent pas par cette
+  configuration ; les certificats restent ceux du système.
+-->
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <base-config cleartextTrafficPermitted="true" tools:ignore="InsecureBaseConfiguration">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

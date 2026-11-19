@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 	"time"
@@ -218,5 +219,14 @@ func TestConfigReadable(t *testing.T) {
 	os.WriteFile(truncated, []byte("RCLONE_ENCRYPT_V1:\nxxx"), 0o600)
 	if configReadable(truncated, "secret") {
 		t.Fatal("format inconnu accepté")
+	}
+}
+
+// N-14 : le runtime Go a un plafond mémoire une fois le pont initialisé.
+func TestMemoryLimit(t *testing.T) {
+	dir := t.TempDir()
+	Init(filepath.Join(dir, "rclone.conf"), filepath.Join(dir, "cache"), "secret")
+	if got := debug.SetMemoryLimit(-1); got != MemoryLimit {
+		t.Fatalf("plafond mémoire = %d, attendu %d", got, MemoryLimit)
 	}
 }

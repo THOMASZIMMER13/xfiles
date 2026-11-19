@@ -103,7 +103,8 @@ private fun MainTabs() {
             is IncomingRequest.Save, is IncomingRequest.Pick -> currentTab = AppTab.EXPLORER
             is IncomingRequest.OpenFolder -> {
                 currentTab = AppTab.EXPLORER
-                explorerOpen = r.path
+                // Un chemin absolu seulement, jamais une route (N-04) : déjà filtré à la réception.
+                if (r.path.startsWith("/")) explorerOpen = r.path
                 incoming.clear()
             }
             null -> Unit

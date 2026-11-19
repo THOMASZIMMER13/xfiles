@@ -1,5 +1,7 @@
 package io.github.thomaszimmer13.xfiles.data.vault
 
+import io.github.thomaszimmer13.xfiles.data.fs.deleteRecursivelyNoFollow
+import io.github.thomaszimmer13.xfiles.data.fs.Ephemeral
 import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
@@ -55,8 +57,11 @@ class Vaults(
     private val store: ServerStore,
     private val sessions: RemoteSessions,
     val keys: VaultKeys,
+    /** Appelé à chaque fermeture : oublie les Récents et positions des copies de passage (N-05). */
+    private val onLocked: () -> Unit = {},
 ) {
-    private val cacheRoot = File(context.applicationContext.cacheDir, "remote")
+    private val cacheDir: File = context.applicationContext.cacheDir
+    private val cacheRoot = File(cacheDir, "remote")
 
     /** Fichiers de passage de rclone (même dossier que Rclone.transferDir) : en clair pour un coffre. */
     private val transferRoot = File(context.applicationContext.cacheDir, "rclone-transfers")
@@ -120,7 +125,10 @@ class Vaults(
     fun lock(id: String) {
         keys.remove(id)
         sessions.forget(id)
-        File(cacheRoot, id).deleteRecursively()
+        deleteRecursivelyNoFollow(File(cacheRoot, id))
+        // Texte OCR, aperçus d'archives et traces mémorisées des copies de passage (N-05).
+        Ephemeral.purge(cacheDir)
+        onLocked()
     }
 
     fun lockAll() {
@@ -134,8 +142,10 @@ class Vaults(
      * fichiers de passage de rclone, qui peuvent contenir le contenu en clair d'un coffre.
      */
     fun purgeCache(atStartup: Boolean = true) {
-        cacheRoot.listFiles()?.filter { it.name.startsWith(ID_PREFIX) && !isOpen(it.name) }?.forEach { it.deleteRecursively() }
-        if (atStartup) transferRoot.listFiles()?.forEach { it.deleteRecursively() }
+        cacheRoot.listFiles()?.filter { it.name.startsWith(ID_PREFIX) && !isOpen(it.name) }?.forEach { deleteRecursivelyNoFollow(it) }
+        if (atStartup) transferRoot.listFiles()?.forEach { deleteRecursivelyNoFollow(it) }
+        Ephemeral.purge(cacheDir)
+        onLocked()
     }
 
     /** Retire le coffre de la liste (ses fichiers chiffrés restent en place). */

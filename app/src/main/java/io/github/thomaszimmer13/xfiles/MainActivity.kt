@@ -1,5 +1,6 @@
 package io.github.thomaszimmer13.xfiles
 
+import android.view.WindowManager
 import android.app.PictureInPictureParams
 import android.content.Intent
 import android.content.res.Configuration
@@ -18,6 +19,7 @@ import androidx.fragment.app.FragmentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.core.content.IntentCompat
+import io.github.thomaszimmer13.xfiles.data.incoming.IncomingFolders
 import io.github.thomaszimmer13.xfiles.data.incoming.IncomingRequest
 import io.github.thomaszimmer13.xfiles.data.open.Shortcuts
 import io.github.thomaszimmer13.xfiles.player.PlaybackService
@@ -52,13 +54,21 @@ class MainActivity : FragmentActivity() {
         val lock = (application as XFilesApplication).container.appLock
         // Verrouillage actif ou coffre ouvert : pas d'aperçu du contenu dans l'écran des applications
         // récentes (audit M-04).
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val vaultKeys = (application as XFilesApplication).container.vaultKeys
-            lifecycleScope.launch {
-                combine(lock.enabled, vaultKeys.open) { locked, open -> locked || open.isNotEmpty() }
-                    .distinctUntilChanged()
-                    .collect { hide -> setRecentsScreenshotEnabled(!hide) }
-            }
+        // Android 11 et 12 (N-12) : pas de setRecentsScreenshotEnabled, FLAG_SECURE à la place ; il
+        // masque aussi les captures d'écran, mais TalkBack continue de tout lire.
+        val vaultKeys = (application as XFilesApplication).container.vaultKeys
+        lifecycleScope.launch {
+            combine(lock.enabled, vaultKeys.open) { locked, open -> locked || open.isNotEmpty() }
+                .distinctUntilChanged()
+                .collect { hide ->
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        setRecentsScreenshotEnabled(!hide)
+                    } else if (hide) {
+                        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    } else {
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+                    }
+                }
         }
         setContent {
             XFilesTheme {
@@ -122,6 +132,15 @@ class MainActivity : FragmentActivity() {
         handle(intent)
     }
 
+    private fun volumeRoots(): List<String> =
+        (application as XFilesApplication).container.volumeRepository.volumeRoots().map { it.second }
+
+    /** Dossiers propres à XFiles, jamais ouverts depuis un raccourci (N-04). */
+    private fun ownDirs(): List<java.io.File> =
+        listOf(dataDir, filesDir, cacheDir, noBackupFilesDir) +
+            getExternalFilesDirs(null).filterNotNull().mapNotNull { it.parentFile } +
+            externalCacheDirs.filterNotNull()
+
     /** Traduit ce que demande l'intent (partage, choix d'un fichier, raccourci) pour l'interface. */
     private fun handle(intent: Intent?) {
         val incoming = (application as XFilesApplication).container.incoming
@@ -133,7 +152,9 @@ class MainActivity : FragmentActivity() {
             Intent.ACTION_GET_CONTENT, Intent.ACTION_PICK -> IncomingRequest.Pick(
                 listOfNotNull(intent.type) + intent.getStringArrayExtra(Intent.EXTRA_MIME_TYPES).orEmpty(),
             )
-            Shortcuts.ACTION_OPEN_FOLDER -> intent.getStringExtra(Shortcuts.EXTRA_PATH)?.let { IncomingRequest.OpenFolder(it) }
+            Shortcuts.ACTION_OPEN_FOLDER -> intent.getStringExtra(Shortcuts.EXTRA_PATH)
+                ?.let { IncomingFolders.safe(it, volumeRoots(), ownDirs()) }
+                ?.let { IncomingRequest.OpenFolder(it) }
             PlaybackService.ACTION_OPEN_PLAYER -> {
                 (application as XFilesApplication).container.player.openScreen()
                 null

@@ -1,5 +1,6 @@
 package io.github.thomaszimmer13.xfiles.ui.zip
 
+import io.github.thomaszimmer13.xfiles.data.fs.Ephemeral
 import android.app.Application
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -140,7 +141,7 @@ class ZipViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val path = withContext(Dispatchers.IO) {
-                    val dir = File(getApplication<Application>().cacheDir, "apercu").apply {
+                    val dir = File(getApplication<Application>().cacheDir, Ephemeral.PREVIEW_DIR).apply {
                         deleteRecursively()
                         mkdirs()
                     }

@@ -65,5 +65,8 @@ class FileOperationException(val reason: Reason, message: String) : IOException(
 
         /** L'archive se décompresse en bien plus que ce qu'elle annonçait (bombe de décompression). */
         TOO_BIG,
+
+        /** Fichier de plus de 4 Go vers une carte ou une clé en FAT32, qui ne peut pas le contenir (N-08). */
+        FILE_TOO_LARGE_FOR_FS,
     }
 }

@@ -15,6 +15,7 @@ import (
 	"encoding/base64"
 	"io"
 	"os"
+	"runtime/debug"
 	"strings"
 	"sync"
 
@@ -54,9 +55,15 @@ const (
 // temporaires dans [cacheDir]. Renvoie ConfigUnreadable si la configuration a dû être mise de
 // côté (renommée en « .illisible ») : rclone aurait sinon arrêté l'application (os.Exit) à chaque
 // lancement. Sans effet après le premier appel (renvoie alors ConfigOK).
+// MemoryLimit : plafond souple de la mémoire du runtime Go, en octets (128 Mio).
+const MemoryLimit = 128 << 20
+
 func Init(configPath string, cacheDir string, password string) string {
 	status := ConfigOK
 	once.Do(func() {
+		// Plafond souple du tas Go (N-14) : au-delà, le ramasse-miettes travaille davantage au lieu de
+		// laisser grossir la mémoire jusqu'à ce qu'Android tue l'application (gros listages distants).
+		debug.SetMemoryLimit(MemoryLimit)
 		_ = os.Setenv("TMPDIR", cacheDir)
 		_ = os.Setenv("HOME", cacheDir)
 		// Jamais de question sur l'entrée standard (elle bloquerait l'application).

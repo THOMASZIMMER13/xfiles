@@ -70,6 +70,8 @@ Première version publique : un gestionnaire de fichiers pensé d'abord pour Tal
 - Avancement des transferts lu par paliers de 10 %, la barre gardant la valeur exacte.
 - Transferts avec avancement et Annuler ; connexion rouverte toute seule après une coupure.
 
+- WebDAV sans HTTPS : permis seulement vers un serveur du réseau local (adresse 192.168.x.x, 10.x.x.x, nom en .local…) ; vers Internet, HTTPS est exigé. SMB : chiffrement SMB 3 dès que le serveur le propose.
+
 ### Comptes en ligne
 - « Ajouter un compte en ligne » : Google Drive, OneDrive, Dropbox, Box, pCloud, Yandex Disk, grâce à rclone intégré.
 - Connexion dans le navigateur, puis lien « Revenir à XFiles » sur la page de fin ; « Annuler la connexion » pendant l'attente.

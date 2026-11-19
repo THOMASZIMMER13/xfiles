@@ -22,14 +22,21 @@ data class SortOptions(
     }
 }
 
-/** Tri des fichiers : les dossiers restent toujours en premier, comme sur iOS. */
+/**
+ * Tri des fichiers : les dossiers restent toujours en premier, comme sur iOS.
+ * Sans état partagé (N-07) : un Collator n'est pas sûr entre plusieurs fils, chaque tri a le sien, et
+ * peut donc tourner sur Dispatchers.Default pendant qu'un autre trie ailleurs (lecteur, recherche).
+ */
 object FileSorter {
 
-    // Ordre alphabétique français, insensible à la casse et aux accents secondaires.
-    private val collator: Collator = Collator.getInstance(Locale.FRANCE).apply { strength = Collator.SECONDARY }
-    private val byName = Comparator<FileItem> { a, b -> collator.compare(a.name, b.name) }
-
     fun sort(items: List<FileItem>, options: SortOptions): List<FileItem> {
+        // Ordre alphabétique français, insensible à la casse et aux accents secondaires. Les clés de
+        // tri sont calculées une fois par nom : 50 000 fichiers se trient sans recomparer les chaînes.
+        val collator: Collator = Collator.getInstance(Locale.FRANCE).apply { strength = Collator.SECONDARY }
+        val keys = HashMap<String, java.text.CollationKey>(items.size * 2)
+        val byName = Comparator<FileItem> { a, b ->
+            keys.getOrPut(a.name) { collator.getCollationKey(a.name) }.compareTo(keys.getOrPut(b.name) { collator.getCollationKey(b.name) })
+        }
         val criterion: Comparator<FileItem> = when (options.key) {
             SortKey.NAME -> byName
             SortKey.DATE -> compareBy<FileItem> { it.lastModified }.then(byName)

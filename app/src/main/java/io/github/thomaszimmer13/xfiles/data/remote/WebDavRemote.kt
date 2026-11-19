@@ -2,6 +2,7 @@ package io.github.thomaszimmer13.xfiles.data.remote
 
 import okhttp3.Credentials
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -28,6 +29,13 @@ class WebDavRemote(private val server: RemoteServer) : RemoteClient {
         .apply { server.basePath.split('/').filter { it.isNotEmpty() }.forEach { addPathSegment(it) } }
         .build()
     private val basePathPrefix = base.encodedPath.trimEnd('/')
+
+    init {
+        // HTTP en clair : seulement vers le réseau local (N-06), Internet exige HTTPS.
+        if (!server.secure && !LocalNetwork.isLocalHost(server.host)) {
+            throw RemoteException(RemoteException.Reason.CLEARTEXT, server.host)
+        }
+    }
 
     private val http = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -58,21 +66,7 @@ class WebDavRemote(private val server: RemoteServer) : RemoteClient {
         val request = Request.Builder().url(dirUrl(path)).header("Depth", "1")
             .method("PROPFIND", body.toRequestBody("application/xml; charset=utf-8".toMediaType())).build()
         return execute(request, path) { response ->
-            val doc = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }.newDocumentBuilder()
-                .parse(response.body.byteStream())
-            val responses = doc.getElementsByTagNameNS("DAV:", "response")
-            val self = dirUrl(path).encodedPath.trimEnd('/')
-            (0 until responses.length).mapNotNull { i ->
-                val r = responses.item(i) as Element
-                val href = r.getElementsByTagNameNS("DAV:", "href").item(0)?.textContent?.trim() ?: return@mapNotNull null
-                val hrefPath = (if (href.startsWith("http")) HttpUrl.Builder().build().let { href.toHttpUrlPath() } else href).trimEnd('/')
-                if (hrefPath == self || hrefPath.isEmpty()) return@mapNotNull null
-                val name = RemoteClient.safeName(URLDecoder.decode(hrefPath.substringAfterLast('/'), "UTF-8")) ?: return@mapNotNull null
-                val isDir = r.getElementsByTagNameNS("DAV:", "collection").length > 0
-                val size = r.getElementsByTagNameNS("DAV:", "getcontentlength").item(0)?.textContent?.trim()?.toLongOrNull() ?: -1L
-                val modified = r.getElementsByTagNameNS("DAV:", "getlastmodified").item(0)?.textContent?.trim()?.let(::parseDate) ?: 0L
-                RemoteEntry(name, RemoteClient.child(path, name), isDir, if (isDir) 0 else size, modified)
-            }
+            parseMultistatus(response.body.byteStream(), path, dirUrl(path).encodedPath)
         }
     }
 
@@ -148,9 +142,35 @@ class WebDavRemote(private val server: RemoteServer) : RemoteClient {
         }
     }
 
-    private fun String.toHttpUrlPath(): String = runCatching { java.net.URI(this).rawPath }.getOrDefault(this)
+    internal companion object {
+        /**
+         * Réponse PROPFIND (multistatus) : les éléments de [path], sans le dossier lui-même. Les href
+         * peuvent être relatifs (« /dav/a.txt ») ou absolus (« https://nas.local/dav/a.txt », N-02).
+         */
+        fun parseMultistatus(xml: java.io.InputStream, path: String, selfEncodedPath: String): List<RemoteEntry> {
+            val doc = DocumentBuilderFactory.newInstance().apply {
+                isNamespaceAware = true
+                // Réponse d'un serveur : ni DTD ni entités externes (XXE).
+                setFeature("http://apache.org/xml/features/disallow-doctype-decl", true)
+                isExpandEntityReferences = false
+            }.newDocumentBuilder().parse(xml)
+            val responses = doc.getElementsByTagNameNS("DAV:", "response")
+            val self = selfEncodedPath.trimEnd('/')
+            return (0 until responses.length).mapNotNull { i ->
+                val r = responses.item(i) as Element
+                val href = r.getElementsByTagNameNS("DAV:", "href").item(0)?.textContent?.trim() ?: return@mapNotNull null
+                val hrefPath = (href.toHttpUrlOrNull()?.encodedPath ?: href).trimEnd('/')
+                if (hrefPath == self || hrefPath.isEmpty()) return@mapNotNull null
+                // « + » est un caractère ordinaire dans un chemin d'URL (URLDecoder le lirait comme une espace).
+                val raw = hrefPath.substringAfterLast('/').replace("+", "%2B")
+                val name = runCatching { URLDecoder.decode(raw, "UTF-8") }.getOrNull()?.let(RemoteClient::safeName) ?: return@mapNotNull null
+                val isDir = r.getElementsByTagNameNS("DAV:", "collection").length > 0
+                val size = r.getElementsByTagNameNS("DAV:", "getcontentlength").item(0)?.textContent?.trim()?.toLongOrNull() ?: -1L
+                val modified = r.getElementsByTagNameNS("DAV:", "getlastmodified").item(0)?.textContent?.trim()?.let(::parseDate) ?: 0L
+                RemoteEntry(name, RemoteClient.child(path, name), isDir, if (isDir) 0 else size, modified)
+            }
+        }
 
-    private companion object {
         fun parseDate(s: String): Long? = runCatching {
             SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US).parse(s)?.time
         }.getOrNull()

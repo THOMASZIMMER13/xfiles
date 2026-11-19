@@ -1,5 +1,6 @@
 package io.github.thomaszimmer13.xfiles.data.remote
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -51,6 +52,11 @@ class RemoteSessions(
                         block(client(slot, server))
                     }
                 }
+            } catch (e: CancellationException) {
+                // Annulation au milieu d'un échange (N-09) : la connexion peut attendre encore une
+                // réponse du serveur ; elle n'est jamais réutilisée.
+                drop(slot)
+                throw e
             } catch (e: Exception) {
                 if (e is RemoteException && e.reason == RemoteException.Reason.UNREACHABLE) drop(slot)
                 throw e

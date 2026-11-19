@@ -1,5 +1,7 @@
 package io.github.thomaszimmer13.xfiles.data.archive
 
+import io.github.thomaszimmer13.xfiles.data.fs.deleteRecursivelyNoFollow
+import io.github.thomaszimmer13.xfiles.data.fs.walkNoLinks
 import io.github.thomaszimmer13.xfiles.data.source.FileOperationException
 import io.github.thomaszimmer13.xfiles.data.source.FileOperationException.Reason
 import io.github.thomaszimmer13.xfiles.data.transfer.TransferCancelledException
@@ -211,7 +213,7 @@ object Archives {
             }
             if (prefix == null && !top.exists()) top.mkdirs()
         } catch (e: Exception) {
-            top.deleteRecursively()
+            deleteRecursivelyNoFollow(top)
             throw translate(e, password)
         }
         return top.path
@@ -436,7 +438,7 @@ object Archives {
     private fun forEachSource(sources: List<File>, block: (File, String) -> Unit) {
         for (source in sources) {
             val base = source.parentFile ?: continue
-            source.walkTopDown().forEach { file -> block(file, file.relativeTo(base).invariantSeparatorsPath) }
+            source.walkNoLinks().forEach { file -> block(file, file.relativeTo(base).invariantSeparatorsPath) }
         }
     }
 

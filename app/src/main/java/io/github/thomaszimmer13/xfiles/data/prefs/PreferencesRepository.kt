@@ -1,5 +1,6 @@
 package io.github.thomaszimmer13.xfiles.data.prefs
 
+import io.github.thomaszimmer13.xfiles.data.fs.Ephemeral
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -86,6 +87,7 @@ class PreferencesRepository(private val context: Context) {
 
     /** Mémorise le bloc où reprendre la lecture de [path] (0 ou null : oublier). */
     suspend fun setDocPosition(path: String, index: Int?) {
+        if (ephemeral(path)) return
         context.dataStore.edit { prefs ->
             val current = prefs[Keys.DOC_POSITIONS].orEmpty().lines().filter { it.isNotEmpty() && it.substringBefore('\t') != path }
             val updated = (if (index != null && index > 0) listOf("$path\t$index") else emptyList()) + current
@@ -126,6 +128,7 @@ class PreferencesRepository(private val context: Context) {
 
     /** Mémorise (ou oublie, si [positionMs] est null) la position de reprise de [path]. */
     suspend fun setResumePosition(path: String, positionMs: Long?) {
+        if (ephemeral(path)) return
         context.dataStore.edit { prefs ->
             val current = prefs[Keys.RESUME_POSITIONS].orEmpty().lines().filter { it.isNotEmpty() && it.substringBefore('\t') != path }
             val updated = (if (positionMs != null) listOf("$path\t$positionMs") else emptyList()) + current
@@ -184,9 +187,30 @@ class PreferencesRepository(private val context: Context) {
     }.distinctUntilChanged()
 
     suspend fun recordOpened(path: String, now: Long = System.currentTimeMillis()) {
+        // Copie de passage (coffre, serveur, aperçu) : son nom ne doit pas survivre à la fermeture (N-05).
+        if (ephemeral(path)) return
         context.dataStore.edit { prefs ->
             val list = listOf(RecentEntry(path, now)) + parseRecents(prefs[Keys.RECENT_FILES]).filter { it.path != path }
             prefs[Keys.RECENT_FILES] = formatRecents(list.take(MAX_RECENTS))
+        }
+    }
+
+    private fun ephemeral(path: String) = Ephemeral.isEphemeral(path, context.cacheDir)
+
+    /**
+     * Oublie tout ce qui désigne une copie de passage (Récents, positions de lecture) : entrées écrites
+     * avant le correctif N-05, ou par une ancienne version. Appelé au démarrage et à la fermeture des coffres.
+     */
+    suspend fun forgetEphemeral() {
+        context.dataStore.edit { prefs ->
+            for (key in listOf(Keys.RECENT_FILES, Keys.RECENT_FOLDERS)) {
+                prefs[key]?.let { raw -> prefs[key] = formatRecents(parseRecents(raw).filter { !ephemeral(it.path) }) }
+            }
+            for (key in listOf(Keys.DOC_POSITIONS, Keys.RESUME_POSITIONS)) {
+                prefs[key]?.let { raw ->
+                    prefs[key] = raw.lines().filter { it.isNotEmpty() && !ephemeral(it.substringBefore('\t')) }.joinToString("\n")
+                }
+            }
         }
     }
 

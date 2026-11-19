@@ -107,6 +107,13 @@ class TransferManager(
         pendingConflict = null
     }
 
+    /** Même système de fichiers (un déplacement n'y est qu'un renommage, sans place à trouver). */
+    private fun sameVolume(a: File, b: File): Boolean = try {
+        android.system.Os.stat(a.path).st_dev == android.system.Os.stat(b.path).st_dev
+    } catch (_: Exception) {
+        false
+    }
+
     /** Colle le presse-papiers dans [dir]. Renvoie false si une opération est déjà en cours. */
     fun paste(clip: ClipContent, dir: String, folder: String, focusResult: Boolean = true): Boolean {
         val kind = if (clip.mode == TransferMode.COPY) TransferKind.COPY else TransferKind.MOVE
@@ -348,6 +355,13 @@ class TransferManager(
         var skipped = 0
         var alreadyHere = 0
         val failures = mutableListOf<FileOperationException.Reason>()
+
+        // Avant de commencer (N-08) : place libre et limite FAT32, annoncées clairement.
+        val target = File(dir)
+        val needsSpace = mode == TransferMode.COPY || clip.items.any { !sameVolume(File(it.path), target) }
+        DiskLimits.check(clip.items.map { File(it.path) }, target, needsSpace)?.let { reason ->
+            throw FileOperationException(reason, dir)
+        }
 
         for (item in clip.items) {
             if (cancelRequested) {

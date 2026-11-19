@@ -13,6 +13,7 @@ import io.github.thomaszimmer13.xfiles.data.transfer.LocalTransfer
 import io.github.thomaszimmer13.xfiles.data.transfer.TransferManager
 import io.github.thomaszimmer13.xfiles.data.trash.LocalTrash
 import io.github.thomaszimmer13.xfiles.data.volumes.VolumeRepository
+import kotlinx.coroutines.launch
 
 class XFilesApplication : Application() {
     lateinit var container: AppContainer
@@ -94,7 +95,9 @@ class AppContainer(application: Application) {
     val remote = io.github.thomaszimmer13.xfiles.data.remote.RemoteSessions(remoteScope, rclone, vaultKeys::get, shizuku::files)
 
     /** Coffres chiffrés (rclone crypt). */
-    val vaults = io.github.thomaszimmer13.xfiles.data.vault.Vaults(application, rclone, servers, remote, vaultKeys)
+    val vaults = io.github.thomaszimmer13.xfiles.data.vault.Vaults(application, rclone, servers, remote, vaultKeys) {
+        remoteScope.launch { preferences.forgetEphemeral() }
+    }
 
     /** Verrouillage de l'app ; après une longue absence, les coffres se referment. */
     val appLock = io.github.thomaszimmer13.xfiles.data.security.AppLock(application) { vaults.lockAll() }

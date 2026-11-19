@@ -56,7 +56,12 @@ data class RemoteEntry(val name: String, val path: String, val isDirectory: Bool
 
 /** Échec d'une opération distante, avec une raison que l'interface sait annoncer. */
 class RemoteException(val reason: Reason, message: String? = null, cause: Throwable? = null) : IOException(message ?: reason.name, cause) {
-    enum class Reason { UNREACHABLE, AUTH, NOT_FOUND, DENIED, EXISTS, TLS, PROTOCOL }
+    enum class Reason {
+        UNREACHABLE, AUTH, NOT_FOUND, DENIED, EXISTS, TLS, PROTOCOL,
+
+        /** Connexion non chiffrée demandée vers un serveur hors du réseau local (N-06). */
+        CLEARTEXT,
+    }
 }
 
 /** Clé SFTP inconnue (première connexion) ou changée : l'utilisateur doit décider. */
