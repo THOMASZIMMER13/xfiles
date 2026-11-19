@@ -14,15 +14,27 @@ Logiciel libre (GPL-3.0), sans publicité ni pistage.
 
 ## Fonctions
 
-- Onglets **Récents**, **Favoris**, **Explorer** ; mémoire interne, carte SD, clé USB.
-- Créer, renommer, copier, déplacer, partager, compresser ; **sélection multiple**.
+- Onglets **Récents**, **Favoris**, **Explorer** ; mémoire interne, carte SD, clé USB (annoncées au branchement et au retrait), catégories (Images, Vidéos, Audio, Documents, Archives, APK).
+- Créer, renommer (aussi **par lot**), copier, déplacer, dupliquer, partager, compresser ; **sélection multiple**.
 - **Corbeille** par volume avec restauration, purge après 30 jours.
-- **Recherche** par nom (sans tenir compte des majuscules ni des accents).
-- **Archives zip** : parcourir, ouvrir, extraire, créer.
-- Opérations longues en **arrière-plan** avec notification et annulation.
+- **Recherche** par nom (sans tenir compte des majuscules ni des accents) ; **nettoyage** (gros fichiers, doublons, anciens téléchargements).
+- **Archives** : parcourir, ouvrir, extraire, comme des dossiers. Formats lus :
+  - zip, 7z, tar, gz, bz2 et xz ;
+  - **RAR 4 et RAR 5**, images **ISO**, par libarchive (licence BSD) compilée avec le NDK ; les RAR chiffrés sont reconnus mais pas extraits.
+
+  Création en zip (AES-256 facultatif), 7z ou tar.gz. Garde-fou contre les archives piégées : ratio, taille et chemins hors du dossier refusés.
+- Opérations longues en **arrière-plan** avec notification et annulation. L'avancement est lu par paliers de 10 %. L'espace libre et la limite de 4 Go du FAT32 sont vérifiés avant de commencer.
 - **Onglets** et **double panneau** (facultatifs), copie directe d'un panneau à l'autre.
-- **Serveurs** (SMB, SFTP, WebDAV, FTP), **comptes en ligne** (Drive, OneDrive, Dropbox…), **coffres chiffrés**.
-- **Verrouillage** par empreinte ou code ; dossiers **Android/data** avec Shizuku (facultatif).
+- **Lecteur audio et vidéo** (FFmpeg, sous-titres, audiodescription) et **lecteur de documents** (txt, PDF, docx, odt, epub), un paragraphe par arrêt TalkBack ; éditeur de texte.
+- **Reconnaissance de texte** (PaddleOCR, sur le téléphone) et **scanner de documents** guidé à la voix.
+- **Serveurs** :
+  - SMB 2/3 (signature, et chiffrement si le serveur le propose) ;
+  - SFTP, avec l'empreinte de la clé vérifiée ;
+  - WebDAV, avec HTTP en clair limité au réseau local ;
+  - FTP et FTPS.
+- **Comptes en ligne** : Drive, OneDrive, Dropbox, Box, pCloud, Yandex, par rclone (connexion dans le navigateur).
+- **Coffres chiffrés**, compatibles avec rclone crypt.
+- **Verrouillage** par empreinte ou code ; dossiers **Android/data**, obb et media avec Shizuku (facultatif).
 
 Détail par version : [CHANGELOG.md](CHANGELOG.md).
 
@@ -37,22 +49,37 @@ indispensable à un gestionnaire de fichiers, puis, lors de la première copie l
 
 ## Feuille de route
 
-- Format d'archive WIM (libarchive ne le lit pas : il faudrait wimlib).
-- RAR chiffrés (libarchive sait les reconnaître, pas les déchiffrer).
+- Format d'archive **WIM** : libarchive ne le lit pas, il faudrait intégrer wimlib (LGPL-3.0) compilée avec le NDK.
+- **RAR chiffrés** : libarchive les reconnaît mais ne les déchiffre pas, et le code UnRAR n'est pas compatible avec la GPL.
+- Recette sur un téléphone Android 11 ou 12 (FLAG_SECURE, aperçu des applications récentes).
 
 ## Compiler
 
+Pré-requis :
+- JDK 17 ou plus et le SDK Android (compilé avec le SDK 37, cible l'API 36, minimum l'API 30).
+- NDK 29.0.14206865 : `sdkmanager "ndk;29.0.14206865"`, ou la variable `ANDROID_NDK_HOME`.
+- Go (version indiquée dans `rclone/go.mod`), pour le pont rclone compilé par gomobile.
+- cmake et ninja, pour libarchive. Ses sources sont téléchargées et vérifiées par `app/native/build.sh` (étiquette et commit figés).
+
+L'application utilise Android Gradle Plugin 9, Kotlin et Jetpack Compose (Material 3).
+
 ```bash
-./gradlew testDebugUnitTest assembleDebug
+# Tests du pont rclone (avec le détecteur de concurrence)
+cd rclone && CGO_ENABLED=1 go test -race ./... && cd ..
+
+# Tests JVM, lint, puis APK
+./gradlew testDebugUnitTest lintDebug
+./gradlew assembleDebug        # ou assembleRelease
 ```
 
-L'APK debug s'installe à côté de la version release (identifiant `….xfiles.debug`).
-L'APK release est optimisé par R8 (code et ressources inutilisés retirés).
+Les tâches `buildRclone` et la compilation de libarchive (pour chaque ABI, plus une version pour
+la machine utilisée par les tests JVM) sont lancées automatiquement par Gradle.
 
-Pré-requis : JDK 17 ou plus. Android Gradle Plugin 9, Kotlin, Jetpack Compose (Material 3) ;
-compilé avec le SDK 37, cible l'API 36, minimum l'API 30.
-Le pont rclone demande Go et le NDK Android ; libarchive (RAR, ISO) est compilée depuis ses sources
-(version et commit figés dans `app/native/build.sh`) avec le NDK 29.0.14206865, cmake et ninja.
+L'APK debug s'installe à côté de la version release (identifiant `….xfiles.debug`). L'APK release
+est optimisé par R8 et décliné par ABI : arm64, armv7, x86_64, plus un APK universel.
+
+Les règles à respecter dans chaque modification (accessibilité, sécurité des fichiers, tests)
+sont dans [CLAUDE.md](CLAUDE.md).
 
 ## CI, signature et publication
 
@@ -74,7 +101,7 @@ construction) et **contrôle des licences** (`./gradlew checkLicenses`, rapport 
 `app/build/reports/licences.txt`) : toute dépendance sous licence incompatible avec la GPL-3.0,
 comme la licence UnRAR, fait échouer la construction.
 
-Avant chaque version : [protocole de recette sur téléphone](docs/RECETTE.md), avec TalkBack.
+Avant chaque version : [protocole de recette sur téléphone](docs/RECETTE.md), avec TalkBack, et sa [version rapide](docs/RECETTE-RAPIDE.md) (15 minutes).
 
 **Sauvegardez la clé** : sans elle, les mises à jour ne s'installeront plus par-dessus l'app existante.
 
@@ -102,7 +129,15 @@ elle est limitée à 100 comptes et affiche un avertissement à la connexion.
 - **Comptes en ligne** : XFiles ne voit jamais le mot de passe du compte, seulement un jeton révocable ; la configuration rclone qui le contient est chiffrée.
 - **Coffres** : rclone crypt (contenus et noms) ; le mot de passe n'est enregistré que scellé par l'empreinte, si on le demande.
 - **Aucune sauvegarde** des données de l'app (sauvegarde Google et transfert d'appareil désactivés).
-- **Shizuku** : facultatif ; il ne sert qu'à lire et écrire dans Android/data, obb et media.
+- **Shizuku** : facultatif ; il ne sert qu'à lire et écrire dans Android/data, obb et media, sans jamais supprimer ces racines.
+- **Fichiers** :
+  - les suppressions et les parcours ne suivent jamais les liens symboliques ;
+  - les noms venus d'un serveur ou d'une archive ne peuvent pas sortir du dossier de destination ;
+  - les raccourcis venus d'autres apps n'ouvrent qu'un dossier du stockage partagé.
+- **Coffres** : à la fermeture, effacement des copies déchiffrées, du texte reconnu, des aperçus, des récents et des positions de lecture.
+- **Média d'un coffre** : écran verrouillé et notification affichent « Fichier du coffre ».
+- **Applications récentes** : aperçu masqué quand l'app est verrouillée ou qu'un coffre est ouvert.
+- **Réseau** : HTTP en clair seulement vers le réseau local ; analyse WebDAV protégée contre XXE.
 
 ## Licence
 

@@ -6,6 +6,12 @@ Les versions suivent la numérotation `majeure.mineure.correctif`.
 
 Première version publique : un gestionnaire de fichiers pensé d'abord pour TalkBack, dans l'esprit de l'app Fichiers d'iOS.
 
+En bref :
+- gestion des fichiers locaux, des archives (dont RAR 5 et ISO), des serveurs, des comptes en ligne et des coffres chiffrés ;
+- lecteurs audio, vidéo et documents, reconnaissance de texte et scanner ;
+- tout se fait au doigt et à l'oreille avec TalkBack, sans voir l'écran ;
+- quatre lots de correctifs issus d'audits de sécurité et d'accessibilité, résumés à la fin de cette section.
+
 ### Parcourir
 - Trois onglets en bas : Récents, Favoris, Explorer. Toucher l'onglet actif ramène à sa racine.
 - Explorer : mémoire interne, carte SD et clé USB (annoncées quand on les branche ou les retire), corbeille, dossiers favoris.
@@ -69,7 +75,6 @@ Première version publique : un gestionnaire de fichiers pensé d'abord pour Tal
 - Taille ou date inconnues du serveur : simplement pas lues (jamais « 0 octet » ni « 1970 »). Après une suppression, le focus va à l'élément voisin ; au retour d'un sous-dossier, sur ce sous-dossier.
 - Avancement des transferts lu par paliers de 10 %, la barre gardant la valeur exacte.
 - Transferts avec avancement et Annuler ; connexion rouverte toute seule après une coupure.
-
 - WebDAV sans HTTPS : permis seulement vers un serveur du réseau local (adresse 192.168.x.x, 10.x.x.x, nom en .local…) ; vers Internet, HTTPS est exigé. SMB : chiffrement SMB 3 dès que le serveur le propose.
 
 ### Comptes en ligne
@@ -128,3 +133,47 @@ Première version publique : un gestionnaire de fichiers pensé d'abord pour Tal
 - Annoncer la position dans les listes (« 3 sur 12 »), sons de confirmation discrets (réussite, échec), tous deux désactivables.
 - Lecteur : lecteur intégré ou habituel, durées de recul et d'avance, lecture des sous-titres.
 - Documents : lecteur de documents intégré ou application habituelle.
+
+### Accessibilité, garanties vérifiées par des tests
+- Un seul arrêt TalkBack par ligne, lu dans l'ordre nom, type, taille, date. Une taille ou une date inconnue n'est pas lue.
+- Toutes les actions passent par les actions personnalisées TalkBack, y compris pour les serveurs, les favoris, la corbeille et les onglets.
+- Le focus est replacé de façon prévisible :
+  - au retour d'un dossier, sur ce dossier ;
+  - après une suppression, sur le voisin ;
+  - après un renommage, sur l'élément renommé ;
+  - à l'ouverture du double panneau, un seul focus.
+- Les progressions se taisent pendant l'opération. Elles sont lues par paliers de 10 % quand on y place le focus, avec un bilan unique à la fin.
+
+### Sécurité et robustesse (audits)
+- **Fichiers** :
+  - suppressions, copies, calculs de taille, archives et recherche ne suivent jamais les liens symboliques ;
+  - chaque suppression est confinée à son dossier (chemin canonique suivi du séparateur) ;
+  - les racines Android/data, obb et media sont protégées.
+- **Noms venus de l'extérieur** (serveurs, archives, autres apps) :
+  - ils ne peuvent pas sortir du dossier de destination ;
+  - les raccourcis entrants n'ouvrent qu'un dossier du stockage partagé, jamais une route interne ni un dossier privé de l'app.
+- **Archives** : libarchive compilée depuis des sources figées et vérifiées. Les archives démesurées (bombes de décompression) sont confirmées avant l'extraction. Une extraction ratée ne laisse rien de partiel.
+- **Collage** : l'espace libre et la limite de 4 Go du FAT32 sont vérifiés avant de commencer, avec des messages distincts. Un remplacement annulé laisse l'original intact.
+- **Coffres** : à la fermeture, sont effacés :
+  - les copies déchiffrées ;
+  - le texte reconnu ;
+  - les aperçus d'archives ;
+  - les entrées des Récents et les positions de lecture.
+
+  Le média d'un coffre s'affiche « Fichier du coffre » hors d'XFiles. L'aperçu des applications récentes est masqué, aussi sous Android 11 et 12.
+- **Réseau** :
+  - SFTP : empreinte vérifiée ;
+  - FTPS : certificat à approuver ;
+  - SMB 3 : signé et chiffré ;
+  - WebDAV : analyse protégée contre XXE, adresses complètes comprises, HTTP en clair limité au réseau local ;
+  - session réseau abandonnée après une annulation ;
+  - pont rclone plafonné à 128 Mio de mémoire, connexion OAuth avec PKCE.
+- **Lecture** : seules les applications de confiance peuvent piloter le lecteur.
+- **Interface** : les tris de grands dossiers ne bloquent plus l'écran. L'annulation des coroutines est toujours propagée.
+- **Construction** :
+  - actions de la CI épinglées par SHA ;
+  - droits en lecture seule ;
+  - clé de signature effacée en fin de job ;
+  - lint bloquant ;
+  - contrôle des licences (aucune dépendance incompatible avec la GPL-3.0) ;
+  - tests JVM et Go avec le détecteur de concurrence.

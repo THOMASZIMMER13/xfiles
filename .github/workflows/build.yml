@@ -81,7 +81,7 @@ jobs:
 
       - name: Tests du pont rclone
         working-directory: rclone
-        run: ./patch.sh && go test ./...
+        run: ./patch.sh && CGO_ENABLED=1 go test -race ./...
 
       # Lint obligatoire (audit M-09) : une erreur arrête la CI.
       - name: Tests, lint et APK debug
